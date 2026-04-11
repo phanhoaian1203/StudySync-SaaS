@@ -9,25 +9,23 @@ public class AuthService : IAuthService
 {
     private readonly IUserRepository _userRepository;
     private readonly IJwtTokenGenerator _jwtTokenGenerator;
-
-    public AuthService(IUserRepository userRepository, IJwtTokenGenerator jwtTokenGenerator)
+    private readonly IUnitOfWork _unitOfWork;
+    public AuthService(IUserRepository userRepository, IJwtTokenGenerator jwtTokenGenerator, IUnitOfWork unitOfWork)
     {
         _userRepository = userRepository;
         _jwtTokenGenerator = jwtTokenGenerator;
+        _unitOfWork = unitOfWork;
     }
 
     public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
     {
-        // 1. Kiểm tra Email tồn tại chưa
         if (await _userRepository.IsEmailExistsAsync(request.Email))
         {
-            throw new Exception("Email này đã được sử dụng!"); // Tạm ném Exception, sau này sẽ dùng Custom Exception chuẩn hơn
+            throw new Exception("Email này đã được sử dụng!");
         }
 
-        // 2. Mã hóa mật khẩu bằng BCrypt
         var passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
 
-        // 3. Tạo User mới
         var newUser = new User
         {
             Email = request.Email,
@@ -35,13 +33,12 @@ public class AuthService : IAuthService
             PasswordHash = passwordHash
         };
 
+        // Gọi Repo để thêm vào DbContext (Bộ nhớ đệm)
         await _userRepository.AddAsync(newUser);
 
-        // LƯU Ý: Ở đây đáng lẽ phải gọi _context.SaveChanges() nếu bạn dùng UnitOfWork. 
-        // Nếu chưa cấu hình UnitOfWork, logic tạm thời chưa lưu thẳng xuống DB.
-        // Ta sẽ giả định User đã được lưu và có ID.
+        // 3. GỌI UNIT OF WORK ĐỂ LƯU XUỐNG SQL SERVER
+        await _unitOfWork.SaveChangesAsync();
 
-        // 4. Sinh Token
         var token = _jwtTokenGenerator.GenerateToken(newUser);
 
         return new AuthResponse
