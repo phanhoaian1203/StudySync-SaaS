@@ -7,6 +7,7 @@ public class User : BaseEntity
 {
     public string Email { get; set; } = string.Empty;
     public string FullName { get; set; } = string.Empty;
+    public string PasswordHash { get; set; } = string.Empty;
     public string? AvatarUrl { get; set; } // Nullable vì có thể user không có avatar
     public SubscriptionPlan SubscriptionPlan { get; set; } = SubscriptionPlan.Free;
 
