@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="StudySync.API/StudySync.API.csproj" />
+  <Project Path="StudySync.Application/StudySync.Application.csproj" />
+  <Project Path="StudySync.Domain/StudySync.Domain.csproj" />
+  <Project Path="StudySync.Infrastructure/StudySync.Infrastructure.csproj" />
+</Solution>
