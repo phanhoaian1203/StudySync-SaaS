@@ -2,17 +2,26 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using StudySync.API.Middleware;
 using StudySync.Infrastructure;
 using StudySync.Infrastructure.Persistence;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
-// 1. Đăng ký các Service từ tầng Infrastructure (DbContext, Repo, UnitOfWork, AuthService...)
-builder.Services.AddInfrastructureServices();
 
-// 2. Cấu hình xác thực JWT Authentication
+// ════════════════════════════════════════════════════════════════════
+// 1. INFRASTRUCTURE SERVICES (DbContext, Repositories, Services...)
+// ════════════════════════════════════════════════════════════════════
+builder.Services.AddInfrastructureServices(builder.Configuration);
+
+// ════════════════════════════════════════════════════════════════════
+// 2. JWT AUTHENTICATION
+// ════════════════════════════════════════════════════════════════════
 var jwtSettings = builder.Configuration.GetSection("Jwt");
-var key = Encoding.UTF8.GetBytes(jwtSettings["Secret"]!);
+var secretKey = jwtSettings["Secret"]
+    ?? throw new InvalidOperationException(
+        "JWT Secret Key chưa được cấu hình! Dùng 'dotnet user-secrets set Jwt:Secret <key>'");
+var key = Encoding.UTF8.GetBytes(secretKey);
 
 builder.Services.AddAuthentication(options =>
 {
@@ -23,52 +32,92 @@ builder.Services.AddAuthentication(options =>
 {
     options.TokenValidationParameters = new TokenValidationParameters
     {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = true,
+        ValidateIssuer           = true,
+        ValidateAudience         = true,
+        ValidateLifetime         = true,
         ValidateIssuerSigningKey = true,
-        ValidIssuer = jwtSettings["Issuer"],
-        ValidAudience = jwtSettings["Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(key),
-        ClockSkew = TimeSpan.Zero // Loại bỏ thời gian trễ mặc định 5 phút
+        ValidIssuer              = jwtSettings["Issuer"],
+        ValidAudience            = jwtSettings["Audience"],
+        IssuerSigningKey         = new SymmetricSecurityKey(key),
+        ClockSkew                = TimeSpan.Zero // Loại bỏ thời gian trễ mặc định 5 phút
     };
 });
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(connectionString));
 
+// ════════════════════════════════════════════════════════════════════
+// 3. CORS — Chỉ cho phép các origin cụ thể
+// ════════════════════════════════════════════════════════════════════
+var allowedOrigins = builder.Configuration
+    .GetSection("AllowedOrigins")
+    .Get<string[]>()
+    ?? throw new InvalidOperationException(
+        "AllowedOrigins chưa được cấu hình trong appsettings.json!");
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("StudySyncPolicy", policy =>
+    {
+        policy
+            .WithOrigins(allowedOrigins)
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials(); // Cần thiết cho SignalR real-time sau này
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════
+// 4. SWAGGER — Tích hợp Bearer Token authentication
+// ════════════════════════════════════════════════════════════════════
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "StudySync API", Version = "v1" });
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title       = "StudySync API",
+        Version     = "v1",
+        Description = "API backend cho nền tảng StudySync SaaS"
+    });
+
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Description = "Nhập Token theo định dạng: Bearer {your_token}",
-        Name = "Authorization",
-        In = ParameterLocation.Header,
-        Type = SecuritySchemeType.ApiKey,
-        Scheme = "Bearer"
+        Name        = "Authorization",
+        In          = ParameterLocation.Header,
+        Type        = SecuritySchemeType.ApiKey,
+        Scheme      = "Bearer"
     });
+
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
             new OpenApiSecurityScheme
             {
-                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id   = "Bearer"
+                }
             },
-            new string[] { }
+            Array.Empty<string>()
         }
     });
 });
+
+// ════════════════════════════════════════════════════════════════════
+// BUILD
+// ════════════════════════════════════════════════════════════════════
 var app = builder.Build();
 
-app.UseCors(builder => builder
-    .AllowAnyOrigin()
-    .AllowAnyMethod()
-    .AllowAnyHeader());
+// ════════════════════════════════════════════════════════════════════
+// 5. MIDDLEWARE PIPELINE — Thứ tự rất quan trọng!
+// ════════════════════════════════════════════════════════════════════
 
-// Configure the HTTP request pipeline.
+// Global Exception Handler — phải ở TRƯỚC TIÊN để bắt mọi lỗi
+app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
+
+// CORS — phải trước Authentication
+app.UseCors("StudySyncPolicy");
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -83,4 +132,3 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
-

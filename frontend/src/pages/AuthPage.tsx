@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { authService } from '../services/authService';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 /* ─────────────────────────────────────────────────────────────────
    Design tokens
@@ -435,7 +435,6 @@ const InputField = ({ label, type, placeholder, value, onChange, required, endAd
    Main component
 ───────────────────────────────────────────────────────────────── */
 const AuthPage = () => {
-  const [isLogin, setIsLogin] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -444,6 +443,10 @@ const AuthPage = () => {
   const [fullName, setFullName] = useState('');
 
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // ✅ FIX: Đọc từ URL path để xác định hiện Login hay Register
+  const [isLogin, setIsLogin] = useState(location.pathname === '/login');
 
   const switchTab = (login: boolean) => {
     setIsLogin(login);
@@ -451,6 +454,8 @@ const AuthPage = () => {
     setEmail('');
     setPassword('');
     setFullName('');
+    // Sync URL với state khi switch tab
+    navigate(login ? '/login' : '/register', { replace: true });
   };
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -465,10 +470,13 @@ const AuthPage = () => {
         navigate('/dashboard');
       } else {
         await authService.register({ email, password, fullName });
-        setIsLogin(true);
+        // ✅ Sau đăng ký thành công: chuyển sang Login và sync URL
+        switchTab(true);
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Đã xảy ra lỗi, vui lòng thử lại.');
+      // Xử lý đúng cấu trúc error response từ GlobalExceptionHandler
+      const serverMessage = err.response?.data?.message;
+      setError(serverMessage || 'Đã xảy ra lỗi, vui lòng thử lại.');
     } finally {
       setIsLoading(false);
     }

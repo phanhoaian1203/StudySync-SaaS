@@ -1,4 +1,4 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.Extensions.Configuration;
@@ -29,7 +29,9 @@ public class JwtTokenGenerator : IJwtTokenGenerator
         };
 
         // 2. Lấy Secret Key từ cấu hình (phải đủ dài và bảo mật)
-        var secretKey = _configuration["Jwt:Secret"] ?? "DayLaMotSecretKeyRatDaiVaBaoMatChoDuAnStudySync2026!";
+        var secretKey = _configuration["Jwt:Secret"]
+            ?? throw new InvalidOperationException(
+                "JWT Secret Key chưa được cấu hình! Dùng 'dotnet user-secrets set Jwt:Secret <key>'");
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 

@@ -1,5 +1,4 @@
-﻿using StudySync.Domain.Common;
-using System.Data.Common;
+using StudySync.Domain.Common;
 
 namespace StudySync.Domain.Entities;
 

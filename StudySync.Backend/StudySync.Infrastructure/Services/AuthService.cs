@@ -1,7 +1,8 @@
-﻿using StudySync.Application.DTOs.Auth;
+using StudySync.Application.DTOs.Auth;
 using StudySync.Application.Interfaces.Repositories;
 using StudySync.Application.Interfaces.Services;
 using StudySync.Domain.Entities;
+using StudySync.Domain.Exceptions;
 
 namespace StudySync.Infrastructure.Services;
 
@@ -21,7 +22,7 @@ public class AuthService : IAuthService
     {
         if (await _userRepository.IsEmailExistsAsync(request.Email))
         {
-            throw new Exception("Email này đã được sử dụng!");
+            throw new ConflictException("Email này đã được sử dụng!");
         }
 
         var passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
@@ -57,14 +58,14 @@ public class AuthService : IAuthService
         var user = await _userRepository.GetByEmailAsync(request.Email);
         if (user == null)
         {
-            throw new Exception("Email hoặc mật khẩu không chính xác.");
+            throw new UnauthorizedException("Email hoặc mật khẩu không chính xác.");
         }
 
         // 2. So sánh mật khẩu người dùng nhập với Hash trong Database
         bool isPasswordValid = BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash);
         if (!isPasswordValid)
         {
-            throw new Exception("Email hoặc mật khẩu không chính xác.");
+            throw new UnauthorizedException("Email hoặc mật khẩu không chính xác.");
         }
 
         // 3. Sinh Token
