@@ -80,4 +80,68 @@ public class TaskService : ITaskService
         _taskRepository.Delete(task);
         await _unitOfWork.SaveChangesAsync();
     }
+
+    public async Task<TaskResponse> MoveAsync(Guid taskId, MoveTaskRequest request, Guid requestingUserId)
+    {
+        var task = await _taskRepository.GetByIdAsync(taskId)
+            ?? throw new NotFoundException("Task", taskId);
+
+        // Đảm bảo cột đích tồn tại
+        var newColumn = await _columnRepository.GetByIdAsync(request.NewColumnId)
+            ?? throw new NotFoundException("Column", request.NewColumnId);
+
+        // Security check có thể bổ sung sau
+
+        task.ColumnId = request.NewColumnId;
+        task.OrderIndex = request.OrderIndex;
+        task.UpdatedById = requestingUserId;
+
+        _taskRepository.Update(task);
+        await _unitOfWork.SaveChangesAsync();
+
+        return new TaskResponse
+        {
+            Id = task.Id,
+            ColumnId = task.ColumnId,
+            Title = task.Title,
+            Description = task.Description,
+            DueDate = task.DueDate,
+            OrderIndex = task.OrderIndex,
+            CreatedAt = task.CreatedAt
+        };
+    }
+
+    public async Task<TaskResponse> UpdateDetailsAsync(Guid taskId, UpdateTaskDetailsRequest request, Guid requestingUserId)
+    {
+        var task = await _taskRepository.GetByIdAsync(taskId)
+            ?? throw new NotFoundException("Task", taskId);
+
+        // Security check có thể bổ sung sau (VD: Ai tạo mới được sửa, hoặc ai trong Board mới được sửa)
+
+        task.Title = request.Title.Trim();
+        if (request.Description != null)
+        {
+            task.Description = request.Description.Trim();
+        }
+        else
+        {
+            task.Description = null;
+        }
+
+        task.UpdatedById = requestingUserId;
+
+        _taskRepository.Update(task);
+        await _unitOfWork.SaveChangesAsync();
+
+        return new TaskResponse
+        {
+            Id = task.Id,
+            ColumnId = task.ColumnId,
+            Title = task.Title,
+            Description = task.Description,
+            DueDate = task.DueDate,
+            OrderIndex = task.OrderIndex,
+            CreatedAt = task.CreatedAt
+        };
+    }
 }

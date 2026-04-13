@@ -13,4 +13,16 @@ export const taskService = {
    */
   delete: (taskId: string): Promise<void> =>
     axiosClient.delete(`/tasks/${taskId}`),
+
+  /**
+   * Di chuyển Task (Drag & Drop)
+   */
+  move: (taskId: string, data: { newColumnId: string, orderIndex: number }): Promise<TaskResponse> =>
+    axiosClient.put(`/tasks/${taskId}/move`, data),
+
+  /**
+   * Cập nhật chi tiết nội dung (Title, Description)
+   */
+  updateDetails: (taskId: string, data: { title: string, description?: string }): Promise<TaskResponse> =>
+    axiosClient.put(`/tasks/${taskId}/details`, data)
 };

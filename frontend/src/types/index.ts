@@ -72,6 +72,16 @@ export interface CreateTaskRequest {
   description?: string;
 }
 
+export interface MoveTaskRequest {
+  newColumnId: string;
+  orderIndex: number;
+}
+
+export interface UpdateTaskDetailsRequest {
+  title: string;
+  description?: string;
+}
+
 export interface TaskResponse {
   id: string;
   columnId: string;

@@ -8,5 +8,7 @@ public interface ITaskService
     Task<TaskResponse> CreateAsync(CreateTaskRequest request, Guid requestingUserId);
     Task DeleteAsync(Guid taskId, Guid requestingUserId);
     
-    // Todo (Sprint 4): Cập nhật vị trí (Drag & Drop), Assign, Due Date
+    Task<TaskResponse> MoveAsync(Guid taskId, MoveTaskRequest request, Guid requestingUserId);
+    
+    Task<TaskResponse> UpdateDetailsAsync(Guid taskId, UpdateTaskDetailsRequest request, Guid requestingUserId);
 }

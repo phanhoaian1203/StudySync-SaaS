@@ -1,6 +1,4 @@
-import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useAuthStore } from './store/authStore';
 import ProtectedRoute  from './components/auth/ProtectedRoute';
 import AppLayout       from './layouts/AppLayout';
 import AuthPage        from './pages/AuthPage';
@@ -9,13 +7,8 @@ import WorkspacePage   from './pages/WorkspacePage';
 import BoardPage       from './pages/BoardPage';
 
 function App() {
-  const initFromStorage = useAuthStore((state) => state.initFromStorage);
-
-  // Khôi phục session từ localStorage TRƯỚC KHI render routes
-  // → Tránh flash: user đã login nhưng bị redirect về /login 1 frame
-  useEffect(() => {
-    initFromStorage();
-  }, [initFromStorage]);
+  // `authStore` đã tự khởi tạo session đồng bộ từ localStorage ngay khi tạo file
+  // nên không cần useEffect() ở đây nữa, tránh flash UI.
 
   return (
     <BrowserRouter>

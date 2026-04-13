@@ -34,6 +34,22 @@ public class TasksController : ControllerBase
         return NoContent();
     }
 
+    [HttpPut("{id:guid}/move")]
+    public async Task<ActionResult<TaskResponse>> Move(Guid id, [FromBody] MoveTaskRequest request)
+    {
+        var userId = GetUserId();
+        var task = await _taskService.MoveAsync(id, request, userId);
+        return Ok(task);
+    }
+
+    [HttpPut("{id:guid}/details")]
+    public async Task<ActionResult<TaskResponse>> UpdateDetails(Guid id, [FromBody] UpdateTaskDetailsRequest request)
+    {
+        var userId = GetUserId();
+        var task = await _taskService.UpdateDetailsAsync(id, request, userId);
+        return Ok(task);
+    }
+
     private Guid GetUserId()
     {
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;

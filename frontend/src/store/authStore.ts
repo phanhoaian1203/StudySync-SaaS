@@ -24,14 +24,28 @@ interface AuthStore {
   initFromStorage:  () => void;
 }
 
+// ── Helper lấy state ban đầu đồng bộ ─────────────────────────
+const getInitialState = () => {
+  const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+  const raw   = localStorage.getItem(STORAGE_KEYS.USER);
+  if (token && raw) {
+    try {
+      const user = JSON.parse(raw) as User;
+      return { user, token, isAuthenticated: true };
+    } catch {
+      localStorage.removeItem(STORAGE_KEYS.TOKEN);
+      localStorage.removeItem(STORAGE_KEYS.USER);
+    }
+  }
+  return { user: null, token: null, isAuthenticated: false };
+};
+
 // ─────────────────────────────────────────────────────────────────
 // Zustand Store
 // ─────────────────────────────────────────────────────────────────
 export const useAuthStore = create<AuthStore>((set) => ({
   // ── Initial state ────────────────────────────────────────────
-  user:            null,
-  token:           null,
-  isAuthenticated: false,
+  ...getInitialState(),
 
   // ── login: gọi sau khi API trả về AuthResponse thành công ───
   login: (response: AuthResponse) => {

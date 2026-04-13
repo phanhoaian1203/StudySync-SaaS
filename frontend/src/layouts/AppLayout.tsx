@@ -3,7 +3,8 @@ import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../store/authStore';
 import { workspaceService } from '../services/workspaceService';
-import type { WorkspaceResponse } from '../types';
+import { boardService } from '../services/boardService';
+import type { WorkspaceResponse, BoardResponse } from '../types';
 
 /* ─────────────────────────────────────────────────────────────────
    Design tokens — consistent with AuthPage
@@ -81,6 +82,12 @@ const Icon = {
       <line x1="3" y1="6" x2="21" y2="6"/>
       <line x1="3" y1="12" x2="21" y2="12"/>
       <line x1="3" y1="18" x2="21" y2="18"/>
+    </svg>
+  ),
+  BoardInfo: () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+      <line x1="9" y1="3" x2="9" y2="21"/>
     </svg>
   ),
 };
@@ -228,6 +235,31 @@ const AppLayout = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [loadingWs,        setLoadingWs]        = useState(true);
 
+  // States Jira Nested Dropdown 
+  const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<string>>(new Set());
+  const [workspaceBoards, setWorkspaceBoards] = useState<Record<string, BoardResponse[]>>({});
+  const [loadingBoards, setLoadingBoards] = useState<Set<string>>(new Set());
+
+  const toggleWorkspace = (wsId: string) => {
+    setExpandedWorkspaces(prev => {
+      const next = new Set(prev);
+      if (next.has(wsId)) {
+        next.delete(wsId);
+      } else {
+        next.add(wsId);
+        // Tải Board nếu chưa có
+        if (!workspaceBoards[wsId]) {
+          setLoadingBoards(l => new Set(l).add(wsId));
+          boardService.getBoardsByWorkspaceId(wsId)
+            .then(boards => setWorkspaceBoards(b => ({ ...b, [wsId]: boards })))
+            .catch(console.error)
+            .finally(() => setLoadingBoards(l => { const nl = new Set(l); nl.delete(wsId); return nl; }));
+        }
+      }
+      return next;
+    });
+  };
+
   const fetchWorkspaces = useCallback(async () => {
     try {
       setLoadingWs(true);
@@ -355,32 +387,105 @@ const AppLayout = () => {
                         </div>
                       ) : (
                         workspaces.map((ws) => {
-                          const isActive = location.pathname.startsWith(`/workspace/${ws.id}`);
+                          const isWsActive = location.pathname.startsWith(`/workspace/${ws.id}`);
+                          const isWsExpanded = expandedWorkspaces.has(ws.id);
+                          const isBoardLoading = loadingBoards.has(ws.id);
+                          const boards = workspaceBoards[ws.id] || [];
+
                           return (
-                            <Link key={ws.id} to={`/workspace/${ws.id}`} style={{ textDecoration: 'none' }}>
+                            <div key={ws.id} style={{ margin: '2px 0' }}>
+                              
+                              {/* Workspace Row (Folder) */}
                               <div style={{
-                                display: 'flex', alignItems: 'center', gap: '8px',
-                                padding: '8px 10px', borderRadius: '8px', margin: '1px 0',
-                                background: isActive ? C.hoverActive : 'transparent',
+                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                padding: '8px 10px', borderRadius: '8px',
+                                background: isWsActive && !isWsExpanded ? C.hoverActive : 'transparent',
                                 cursor: 'pointer', transition: 'background 0.15s',
                               }}
-                                onMouseEnter={(e) => { if(!isActive)(e.currentTarget as HTMLDivElement).style.background = C.hover; }}
-                                onMouseLeave={(e) => { if(!isActive)(e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+                                onClick={() => toggleWorkspace(ws.id)}
+                                onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = C.hover; }}
+                                onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = isWsActive && !isWsExpanded ? C.hoverActive : 'transparent'; }}
                               >
-                                {/* Workspace color dot */}
-                                <div style={{
-                                  width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0,
-                                  background: isActive ? C.accent : 'rgba(148,163,184,0.5)'
-                                }} />
-                                <span style={{
-                                  color: isActive ? C.textPrimary : C.textSecondary,
-                                  fontSize: '13px', fontWeight: isActive ? 600 : 400,
-                                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                                }}>
-                                  {ws.name}
-                                </span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+                                  <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '16px', color: isWsExpanded ? C.accent : 'rgba(148,163,184,0.6)' }}>
+                                    <Icon.ChevronDown open={isWsExpanded} />
+                                  </div>
+                                  <span style={{
+                                    color: (isWsActive || isWsExpanded) ? C.textPrimary : C.textSecondary,
+                                    fontSize: '13px', fontWeight: (isWsActive || isWsExpanded) ? 600 : 500,
+                                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                  }}>
+                                    {ws.name}
+                                  </span>
+                                </div>
                               </div>
-                            </Link>
+
+                              {/* Nested Boards List */}
+                              <AnimatePresence>
+                                {isWsExpanded && (
+                                  <motion.div
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: 'auto', opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    transition={{ duration: 0.15 }}
+                                    style={{ overflow: 'hidden', paddingLeft: '18px', borderLeft: `1px solid ${C.borderLight}`, marginLeft: '17px', marginTop: '2px' }}
+                                  >
+                                    
+                                    {/* Workspace Overview Link */}
+                                    <Link to={`/workspace/${ws.id}`} style={{ textDecoration: 'none' }}>
+                                      <div style={{
+                                          padding: '7px 10px', borderRadius: '6px', fontSize: '12px',
+                                          color: location.pathname === `/workspace/${ws.id}` ? C.accent : C.textSecondary,
+                                          fontWeight: location.pathname === `/workspace/${ws.id}` ? 600 : 400,
+                                          background: location.pathname === `/workspace/${ws.id}` ? 'rgba(79,110,242,0.1)' : 'transparent',
+                                          cursor: 'pointer', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px'
+                                        }}
+                                        onMouseEnter={(e) => { if(location.pathname !== `/workspace/${ws.id}`) (e.currentTarget as HTMLDivElement).style.background = C.hover; }}
+                                        onMouseLeave={(e) => { if(location.pathname !== `/workspace/${ws.id}`) (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+                                      >
+                                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'currentColor' }} />
+                                        Tổng quan (Space)
+                                      </div>
+                                    </Link>
+
+                                    {/* Danh sách Board */}
+                                    {isBoardLoading ? (
+                                      <div style={{ padding: '6px 10px', fontSize: '11px', color: C.textMuted }}>Đang tải bảng...</div>
+                                    ) : boards.length === 0 ? (
+                                      <div style={{ padding: '6px 10px', fontSize: '11px', color: C.textMuted }}>Không có bảng nào.</div>
+                                    ) : (
+                                      boards.map(board => {
+                                        const boardPath = `/workspace/${ws.id}/board/${board.id}`;
+                                        const isBoardActive = location.pathname === boardPath;
+                                        return (
+                                          <Link key={board.id} to={boardPath} style={{ textDecoration: 'none' }}>
+                                            <div style={{
+                                              padding: '7px 10px', borderRadius: '6px', fontSize: '12px',
+                                              display: 'flex', alignItems: 'center', gap: '8px',
+                                              background: isBoardActive ? C.hoverActive : 'transparent',
+                                              color: isBoardActive ? C.textPrimary : C.textSecondary,
+                                              fontWeight: isBoardActive ? 600 : 400,
+                                              cursor: 'pointer', margin: '2px 0'
+                                            }}
+                                              onMouseEnter={(e) => { if(!isBoardActive) (e.currentTarget as HTMLDivElement).style.background = C.hover; }}
+                                              onMouseLeave={(e) => { if(!isBoardActive) (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+                                            >
+                                              <span style={{ color: isBoardActive ? C.accent : 'rgba(148,163,184,0.5)', display: 'flex' }}>
+                                                <Icon.BoardInfo />
+                                              </span>
+                                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {board.name}
+                                              </span>
+                                            </div>
+                                          </Link>
+                                        )
+                                      })
+                                    )}
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                              
+                            </div>
                           );
                         })
                       )}
