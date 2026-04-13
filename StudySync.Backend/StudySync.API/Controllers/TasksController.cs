@@ -50,6 +50,22 @@ public class TasksController : ControllerBase
         return Ok(task);
     }
 
+    [HttpPost("{id:guid}/assignees")]
+    public async Task<ActionResult<TaskResponse>> AssignUser(Guid id, [FromBody] AssignTaskRequest request)
+    {
+        var userId = GetUserId();
+        var task = await _taskService.AssignUserAsync(id, request, userId);
+        return Ok(task);
+    }
+
+    [HttpDelete("{id:guid}/assignees/{userIdToUnassign:guid}")]
+    public async Task<ActionResult<TaskResponse>> UnassignUser(Guid id, Guid userIdToUnassign)
+    {
+        var userId = GetUserId();
+        var task = await _taskService.UnassignUserAsync(id, userIdToUnassign, userId);
+        return Ok(task);
+    }
+
     private Guid GetUserId()
     {
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;

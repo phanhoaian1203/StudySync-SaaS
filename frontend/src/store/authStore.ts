@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { User, AuthResponse } from '../types';
+import type { UserResponse as User, AuthResponse } from '../types';
 
 // ─────────────────────────────────────────────────────────────────
 // Storage keys — tập trung, tránh string magic
@@ -50,7 +50,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
   // ── login: gọi sau khi API trả về AuthResponse thành công ───
   login: (response: AuthResponse) => {
     const user: User = {
-      userId:           response.userId,
+      id:               response.userId,
       email:            response.email,
       fullName:         response.fullName,
       subscriptionPlan: response.subscriptionPlan,

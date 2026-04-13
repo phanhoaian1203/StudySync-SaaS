@@ -66,6 +66,26 @@ public class WorkspacesController : ControllerBase
         return NoContent();
     }
 
+    // ───────────────────────────────────────────────────────────────────
+    // MEMBERS MANAGEMENT
+    // ───────────────────────────────────────────────────────────────────
+
+    [HttpPost("{id:guid}/members")]
+    public async Task<ActionResult<WorkspaceMemberResponse>> AddMember(Guid id, [FromBody] AddMemberRequest request)
+    {
+        var userId = GetUserId();
+        var response = await _workspaceService.AddMemberAsync(id, request, userId);
+        return Ok(response);
+    }
+
+    [HttpGet("{id:guid}/members")]
+    public async Task<ActionResult<IEnumerable<WorkspaceMemberResponse>>> GetMembers(Guid id)
+    {
+        var userId = GetUserId();
+        var members = await _workspaceService.GetMembersAsync(id, userId);
+        return Ok(members);
+    }
+
     // ─────────────────────────────────────────────────────────────────
     // Helper: Trích xuất UserId từ Claims (JWT)
     // ─────────────────────────────────────────────────────────────────

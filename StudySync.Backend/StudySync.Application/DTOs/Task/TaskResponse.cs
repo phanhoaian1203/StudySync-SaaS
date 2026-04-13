@@ -9,4 +9,6 @@ public class TaskResponse
     public DateTime? DueDate { get; set; }
     public double OrderIndex { get; set; }
     public DateTime CreatedAt { get; set; }
+    
+    public List<StudySync.Application.DTOs.User.UserDto> Assignees { get; set; } = new();
 }

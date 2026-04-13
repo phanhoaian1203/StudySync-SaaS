@@ -16,6 +16,8 @@ public interface IWorkspaceService
     /// </summary>
     Task<WorkspaceResponse> CreateAsync(CreateWorkspaceRequest request, Guid ownerId);
 
-    /// <summary>Xóa mềm Workspace (chỉ Owner được phép).</summary>
     Task DeleteAsync(Guid workspaceId, Guid ownerId);
+    
+    Task<WorkspaceMemberResponse> AddMemberAsync(Guid workspaceId, AddMemberRequest request, Guid requestingUserId);
+    Task<IEnumerable<WorkspaceMemberResponse>> GetMembersAsync(Guid workspaceId, Guid requestingUserId);
 }

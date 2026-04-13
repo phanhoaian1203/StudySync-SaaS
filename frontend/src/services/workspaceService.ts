@@ -1,5 +1,5 @@
 import axiosClient from './axiosClient';
-import type { WorkspaceResponse, CreateWorkspaceRequest } from '../types';
+import type { WorkspaceResponse, CreateWorkspaceRequest, WorkspaceMemberResponse } from '../types';
 
 export const workspaceService = {
   /**
@@ -23,10 +23,15 @@ export const workspaceService = {
   create: (data: CreateWorkspaceRequest): Promise<WorkspaceResponse> =>
     axiosClient.post('/workspaces', data),
 
-  /**
-   * Xóa mềm Workspace (chỉ Owner mới được xóa).
-   * DELETE /api/workspaces/:id
-   */
-  delete: (id: string): Promise<void> =>
+  /** Xóa Workspace */
+  delete: (id: string): Promise<void> => 
     axiosClient.delete(`/workspaces/${id}`),
+
+  /** Lấy danh sách thành viên */
+  getMembers: (id: string): Promise<WorkspaceMemberResponse[]> =>
+    axiosClient.get(`/workspaces/${id}/members`),
+
+  /** Mời thành viên bằng Email */
+  addMember: (id: string, email: string): Promise<WorkspaceMemberResponse> =>
+    axiosClient.post(`/workspaces/${id}/members`, { email })
 };

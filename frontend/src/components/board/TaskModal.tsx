@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import MDEditor from '@uiw/react-md-editor';
 import { taskService } from '../../services/taskService';
-import type { TaskResponse } from '../../types';
+import type { TaskResponse, WorkspaceMemberResponse } from '../../types';
 
 /* ─────────────────────────────────────────────────────────────────
    Design tokens
@@ -19,14 +19,16 @@ const C = {
 
 interface TaskModalProps {
   task: TaskResponse;
+  members: WorkspaceMemberResponse[];
   onClose: () => void;
   onUpdateTask: (updatedTask: TaskResponse) => void;
 }
 
-const TaskModal = ({ task, onClose, onUpdateTask }: TaskModalProps) => {
+export default function TaskModal({ task, members, onClose, onUpdateTask }: TaskModalProps) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description || '');
   const [isSaving, setIsSaving] = useState(false);
+  const [showAssignDrop, setShowAssignDrop] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -67,6 +69,22 @@ const TaskModal = ({ task, onClose, onUpdateTask }: TaskModalProps) => {
   // Immediate save on Blur (Title)
   const handleTitleBlur = () => {
     saveChanges(title, description);
+  };
+
+  const handleToggleAssignee = async (memberId: string) => {
+    try {
+      const isAssigned = task.assignees?.some(a => a.id === memberId);
+      let updatedTask;
+      if (isAssigned) {
+         updatedTask = await taskService.unassignUser(task.id, memberId);
+      } else {
+         updatedTask = await taskService.assignUser(task.id, memberId);
+      }
+      onUpdateTask(updatedTask);
+    } catch (e) {
+      console.error(e);
+      alert("Lỗi khi gán thành viên!");
+    }
   };
 
   return (
@@ -148,25 +166,66 @@ const TaskModal = ({ task, onClose, onUpdateTask }: TaskModalProps) => {
             
           </div>
 
-          {/* RIGHT SIDEBAR (For Sprint 7 & 8) */}
+          {/* RIGHT SIDEBAR */}
           <div style={{ flex: 3, padding: '24px', background: 'rgba(255,255,255,0.02)' }}>
             <h4 style={{ fontSize: '12px', textTransform: 'uppercase', color: C.textMuted, letterSpacing: '0.05em', marginBottom: '16px' }}>
-              Thông tin bổ sung
+              Người Thực Hiện
+            </h4>
+            
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
+               {task.assignees?.map(assignee => (
+                 <div key={assignee.id} title={assignee.fullName} style={{ width: '32px', height: '32px', borderRadius: '50%', background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', color: '#fff', fontWeight: 600 }}>
+                   {assignee.fullName.charAt(0).toUpperCase()}
+                 </div>
+               ))}
+               
+               {/* Nút cộng Assignees */}
+               <div style={{ position: 'relative' }}>
+                 <button 
+                   onClick={() => setShowAssignDrop(!showAssignDrop)}
+                   style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'transparent', border: `1px dashed ${C.textMuted}`, color: C.textMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                 >
+                   +
+                 </button>
+                 
+                 {/* Dropdown members */}
+                 {showAssignDrop && (
+                   <div style={{ position: 'absolute', top: '40px', left: 0, width: '200px', background: C.bg, border: `1px solid ${C.border}`, borderRadius: '8px', zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
+                      {members.map(m => {
+                        const isAssigned = task.assignees?.some(a => a.id === m.userId);
+                        return (
+                          <div 
+                            key={m.userId}
+                            onClick={() => handleToggleAssignee(m.userId)}
+                            style={{ padding: '8px 12px', fontSize: '13px', color: C.text, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', background: isAssigned ? 'rgba(255,255,255,0.05)' : 'transparent', borderBottom: `1px solid ${C.border}` }}
+                            onMouseEnter={e => (e.target as HTMLDivElement).style.background = C.hover}
+                            onMouseLeave={e => { if(!isAssigned) (e.target as HTMLDivElement).style.background = 'transparent' }}
+                          >
+                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', pointerEvents: 'none' }}>
+                               <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px' }}>
+                                 {m.fullName.charAt(0)}
+                               </div>
+                               <span>{m.fullName}</span>
+                             </div>
+                             {isAssigned && <span style={{ color: C.accent, fontSize: '12px', pointerEvents: 'none' }}>✓</span>}
+                          </div>
+                        )
+                      })}
+                      {members.length === 0 && <div style={{ padding: '8px', fontSize: '12px', color: C.textMuted }}>Không có thành viên.</div>}
+                   </div>
+                 )}
+               </div>
+            </div>
+
+            <h4 style={{ fontSize: '12px', textTransform: 'uppercase', color: C.textMuted, letterSpacing: '0.05em', marginBottom: '16px', marginTop: '32px' }}>
+              Thông tin khác
             </h4>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                <div>
-                 <span style={{ fontSize: '13px', color: C.textMuted, display: 'block', marginBottom: '4px' }}>Người tạo</span>
-                 <div style={{ fontSize: '14px', color: C.text, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                   <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px' }}>ME</div>
-                   Bạn
-                 </div>
-               </div>
-
-               <div>
                  <span style={{ fontSize: '13px', color: C.textMuted, display: 'block', marginBottom: '4px' }}>Trạng thái</span>
                  <div style={{ fontSize: '13px', padding: '4px 8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', display: 'inline-block' }}>
-                   Nằm ở bảng này
+                   ID Bảng: {task.columnId.slice(0, 8)}...
                  </div>
                </div>
             </div>
@@ -178,4 +237,4 @@ const TaskModal = ({ task, onClose, onUpdateTask }: TaskModalProps) => {
   );
 };
 
-export default TaskModal;
+

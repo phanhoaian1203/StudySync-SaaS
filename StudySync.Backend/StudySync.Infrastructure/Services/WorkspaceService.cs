@@ -141,4 +141,90 @@ public class WorkspaceService : IWorkspaceService
         _workspaceRepository.Delete(workspace);
         await _unitOfWork.SaveChangesAsync();
     }
+
+    // ───────────────────────────────────────────────────────────────────
+    public async Task<WorkspaceMemberResponse> AddMemberAsync(Guid workspaceId, AddMemberRequest request, Guid requestingUserId)
+    {
+        var workspace = await _workspaceRepository.GetByIdAsync(workspaceId)
+            ?? throw new NotFoundException("Workspace", workspaceId);
+
+        // Chỉ Owner mới được quyền Adds
+        if (workspace.OwnerId != requestingUserId)
+            throw new ForbiddenException("Chỉ Owner mới có quyền thêm thành viên.");
+
+        var userToAdd = await _userRepository.GetByEmailAsync(request.Email.Trim())
+            ?? throw new NotFoundException("User", "Email not found");
+
+        // Kiểm tra đã là thành viên chưa
+        var existingMember = await _context.WorkspaceMembers
+            .FirstOrDefaultAsync(m => m.WorkspaceId == workspaceId && m.UserId == userToAdd.Id);
+
+        if (existingMember != null || workspace.OwnerId == userToAdd.Id)
+            throw new ConflictException("Người dùng đã tồn tại trong Workspace này.");
+
+        var newMember = new WorkspaceMember
+        {
+            WorkspaceId = workspaceId,
+            UserId = userToAdd.Id,
+            Role = WorkspaceRole.Member,
+            JoinedAt = DateTime.UtcNow
+        };
+
+        await _context.WorkspaceMembers.AddAsync(newMember);
+        await _unitOfWork.SaveChangesAsync();
+
+        return new WorkspaceMemberResponse
+        {
+            UserId = userToAdd.Id,
+            FullName = userToAdd.FullName,
+            Email = userToAdd.Email,
+            Role = newMember.Role.ToString(),
+            JoinedAt = newMember.JoinedAt
+        };
+    }
+
+    public async Task<IEnumerable<WorkspaceMemberResponse>> GetMembersAsync(Guid workspaceId, Guid requestingUserId)
+    {
+        var workspace = await _workspaceRepository.GetByIdAsync(workspaceId)
+            ?? throw new NotFoundException("Workspace", workspaceId);
+
+        // Phải là members mới được xem list members
+        var isMember = await _context.WorkspaceMembers
+            .AnyAsync(m => m.WorkspaceId == workspaceId && m.UserId == requestingUserId);
+
+        if (workspace.OwnerId != requestingUserId && !isMember)
+            throw new ForbiddenException("Bạn không có quyền truy cập Workspace này.");
+
+        // Lấy Owner mapping
+        var owner = await _userRepository.GetByIdAsync(workspace.OwnerId);
+        
+        var membersList = new List<WorkspaceMemberResponse>();
+        if (owner != null)
+        {
+            membersList.Add(new WorkspaceMemberResponse
+            {
+                UserId = owner.Id,
+                FullName = owner.FullName,
+                Email = owner.Email,
+                Role = "Owner",
+                JoinedAt = workspace.CreatedAt // Owner join lúc tạo
+            });
+        }
+
+        var otherMembers = await _context.WorkspaceMembers
+            .Include(m => m.User)
+            .Where(m => m.WorkspaceId == workspaceId)
+            .Select(m => new WorkspaceMemberResponse
+            {
+                UserId = m.User.Id,
+                FullName = m.User.FullName,
+                Email = m.User.Email,
+                Role = m.Role.ToString(),
+                JoinedAt = m.JoinedAt
+            })
+            .ToListAsync();
+
+        membersList.AddRange(otherMembers);
+        return membersList.OrderBy(m => m.JoinedAt);
+    }
 }

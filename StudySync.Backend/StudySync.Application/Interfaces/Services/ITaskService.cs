@@ -11,4 +11,7 @@ public interface ITaskService
     Task<TaskResponse> MoveAsync(Guid taskId, MoveTaskRequest request, Guid requestingUserId);
     
     Task<TaskResponse> UpdateDetailsAsync(Guid taskId, UpdateTaskDetailsRequest request, Guid requestingUserId);
+
+    Task<TaskResponse> AssignUserAsync(Guid taskId, AssignTaskRequest request, Guid requestingUserId);
+    Task<TaskResponse> UnassignUserAsync(Guid taskId, Guid userIdToUnassign, Guid requestingUserId);
 }

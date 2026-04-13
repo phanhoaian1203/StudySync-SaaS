@@ -24,5 +24,17 @@ export const taskService = {
    * Cập nhật chi tiết nội dung (Title, Description)
    */
   updateDetails: (taskId: string, data: { title: string, description?: string }): Promise<TaskResponse> =>
-    axiosClient.put(`/tasks/${taskId}/details`, data)
+    axiosClient.put(`/tasks/${taskId}/details`, data),
+
+  /**
+   * Gán người vào task
+   */
+  assignUser: (taskId: string, userId: string): Promise<TaskResponse> =>
+    axiosClient.post(`/tasks/${taskId}/assignees`, { userId }),
+
+  /**
+   * Gỡ người khỏi task
+   */
+  unassignUser: (taskId: string, userIdToUnassign: string): Promise<TaskResponse> =>
+    axiosClient.delete(`/tasks/${taskId}/assignees/${userIdToUnassign}`)
 };

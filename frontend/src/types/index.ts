@@ -5,11 +5,18 @@
 // ── AUTH ──────────────────────────────────────────────────────────
 export type SubscriptionPlan = 0 | 1; // 0=Free, 1=Pro
 
-export interface User {
-  userId: string;
+export interface UserResponse {
+  id: string;
   email: string;
   fullName: string;
-  subscriptionPlan: SubscriptionPlan;
+  avatarUrl?: string;
+  subscriptionPlan: number;
+}
+
+export interface UserDto {
+  id: string;
+  fullName: string;
+  email: string;
 }
 
 export interface LoginRequest {
@@ -35,11 +42,19 @@ export interface AuthResponse {
 export interface WorkspaceResponse {
   id: string;
   name: string;
-  description: string | null;
+  description?: string;
   ownerId: string;
   memberCount: number;
   boardCount: number;
   createdAt: string;
+}
+
+export interface WorkspaceMemberResponse {
+  userId: string;
+  fullName: string;
+  email: string;
+  role: string;
+  joinedAt: string;
 }
 
 export interface CreateWorkspaceRequest {
@@ -90,6 +105,7 @@ export interface TaskResponse {
   dueDate?: string;
   orderIndex: number;
   createdAt: string;
+  assignees?: UserDto[];
 }
 
 export interface ColumnResponse {

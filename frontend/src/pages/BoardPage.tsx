@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { DropResult } from '@hello-pangea/dnd';
 import { boardService } from '../services/boardService';
 import { columnService } from '../services/columnService';
 import { taskService } from '../services/taskService';
+import { workspaceService } from '../services/workspaceService';
 import TaskModal from '../components/board/TaskModal';
-import type { BoardResponse, ColumnResponse, TaskResponse } from '../types';
+import type { BoardResponse, ColumnResponse, TaskResponse, WorkspaceMemberResponse } from '../types';
 
 /* ─────────────────────────────────────────────────────────────────
    Design tokens
@@ -50,27 +51,32 @@ const BoardPage = () => {
 
   // Mở Task Modal Detail
   const [selectedTask, setSelectedTask] = useState<TaskResponse | null>(null);
+  const [members, setMembers] = useState<WorkspaceMemberResponse[]>([]);
+  const [error, setError] = useState('');
 
   // 1. Khởi tạo Data
   useEffect(() => {
     if (!boardId) return;
     setLoading(true);
-    Promise.all([
-      boardService.getById(boardId),
-      columnService.getColumnsByBoardId(boardId)
-    ])
-    .then(([bData, cData]) => {
-      setBoard(bData);
-      
-      // Đảm bảo mảng task được sort theo OrderIndex
-      const sortedCols = cData.map(col => ({
-        ...col,
-        tasks: col.tasks.sort((a, b) => a.orderIndex - b.orderIndex)
-      }));
-      setColumns(sortedCols);
-    })
-    .catch(console.error)
-    .finally(() => setLoading(false));
+    boardService.getById(boardId)
+      .then(res => {
+         setBoard(res);
+         // Gọi list member đính kèm
+         workspaceService.getMembers(res.workspaceId).then(m => setMembers(m)).catch(e => console.error(e));
+      })
+      .catch(e => { console.error(e); setError('Không thể tải Board'); })
+      .finally(() => setLoading(false));
+
+    columnService.getColumnsByBoardId(boardId)
+      .then(cData => {
+        // Đảm bảo mảng task được sort theo OrderIndex
+        const sortedCols = cData.map(col => ({
+          ...col,
+          tasks: col.tasks.sort((a, b) => a.orderIndex - b.orderIndex)
+        }));
+        setColumns(sortedCols);
+      })
+      .catch(e => console.error(e));
   }, [boardId]);
 
   // 2. Logic Kéo Thả (Drag & Drop)
@@ -200,7 +206,13 @@ const BoardPage = () => {
 
   // ── RENDER ──────────────────────────────────────────────────────────
   if (loading) return <div style={{ color: C.text }}>Đang tải Kanban Board...</div>;
-  if (!board) return <div style={{ color: '#fca5a5' }}>Không tìm thấy Board.</div>;
+  if (!board) return <div style={{ color: '#fca5a5' }}>{error || 'Không tìm thấy Board.'}</div>;
+
+  const tabs = [
+    { id: 'summary', label: 'Tổng quan' },
+    { id: 'backlog', label: 'Backlog' },
+    { id: 'board', label: 'Bảng Kanban' },
+  ] as const;
 
   return (
     <div style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
@@ -210,28 +222,33 @@ const BoardPage = () => {
         <h1 style={{ color: C.text, fontSize: '24px', fontWeight: 800, margin: '0 0 16px 0' }}>{board.name}</h1>
 
         {/* ── Thanh Tabs Điều Hướng (Project Tabs) ─── */}
-        <div style={{ display: 'flex', gap: '24px', borderBottom: `1px solid ${C.border}`, marginBottom: '24px' }}>
-          {[
-            { id: 'summary', label: 'Tổng quan' },
-            { id: 'backlog', label: 'Backlog' },
-            { id: 'board', label: 'Bảng Kanban' },
-          ].map(tab => (
+        <div style={{ display: 'flex', gap: '32px', borderBottom: `1px solid ${C.border}`, marginBottom: '24px' }}>
+          {tabs.map(t => (
             <div 
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              style={{
-                paddingBottom: '12px',
-                color: activeTab === tab.id ? C.accent : C.textMuted,
-                fontWeight: activeTab === tab.id ? 600 : 500,
-                fontSize: '14px',
-                cursor: 'pointer',
-                borderBottom: activeTab === tab.id ? `3px solid ${C.accent}` : '3px solid transparent',
-                transition: 'all 0.2s ease'
-              }}
+              key={t.id}
+              onClick={() => setActiveTab(t.id)}
+              style={{ paddingBottom: '16px', position: 'relative', cursor: 'pointer', color: activeTab === t.id ? '#fff' : C.textMuted, fontWeight: activeTab === t.id ? 600 : 400, transition: 'all 0.2s' }}
             >
-              {tab.label}
+              {t.label}
+              {activeTab === t.id && <motion.div layoutId="tab-indicator" style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '3px', background: C.accent, borderRadius: '3px 3px 0 0' }} />}
             </div>
           ))}
+          
+          <button
+             onClick={() => {
+               const email = prompt("Nhập Email của thành viên bạn muốn thêm vào Workspace này:");
+               if(email && email.trim()) {
+                 workspaceService.addMember(board?.workspaceId || '', email.trim())
+                   .then(res => {
+                      setMembers(prev => [...prev, res]);
+                      alert("Đã thêm thành viên thành công!");
+                   }).catch(() => alert("Thêm thất bại. User không tồn tại hoặc đã trong phòng."));
+               }
+             }}
+             style={{ marginLeft: 'auto', background: C.accent, color: '#fff', border: 'none', padding: '6px 16px', borderRadius: '6px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}
+          >
+            Mời Thành Viên
+          </button>
         </div>
       </div>
 
@@ -266,7 +283,7 @@ const BoardPage = () => {
           
           {columns.map(col => {
             const colColor = getColumnColor(col.name);
-            const isDoneList = colColor === '#10b981'; // Check xem có phải cột Done không
+            const isDoneCol = colColor === '#10b981'; // Check xem có phải cột Done không
 
             return (
             <div key={col.id} style={{ 
@@ -317,15 +334,20 @@ const BoardPage = () => {
                               ...provided.draggableProps.style // Quan trọng: giữ style inline của dnd
                             }}
                           >
-                            <div style={{ 
-                              color: isDoneList ? C.textMuted : C.text, 
-                              fontSize: '14px', lineHeight: 1.5, paddingRight: '20px',
-                              textDecoration: isDoneList && !snapshot.isDragging ? 'line-through' : 'none',
-                              opacity: isDoneList && !snapshot.isDragging ? 0.7 : 1,
-                              transition: 'all 0.2s ease'
-                            }}>
+                            <span style={{ fontSize: '14px', color: isDoneCol ? C.textMuted : C.text, textDecoration: isDoneCol ? 'line-through' : 'none' }}>
                               {task.title}
-                            </div>
+                            </span>
+
+                            {/* Hiển thị avatar người được gán */}
+                            {task.assignees && task.assignees.length > 0 && (
+                               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
+                                 {task.assignees.map(a => (
+                                    <div key={a.id} title={a.fullName} style={{ width: '24px', height: '24px', borderRadius: '50%', background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#fff', marginLeft: '-6px', border: `2px solid ${C.cardBg}` }}>
+                                      {a.fullName.charAt(0).toUpperCase()}
+                                    </div>
+                                 ))}
+                               </div>
+                            )}
                             
                             {/* Nút xóa */}
                             {!snapshot.isDragging && (
@@ -395,6 +417,7 @@ const BoardPage = () => {
         {selectedTask && (
           <TaskModal 
             task={selectedTask}
+            members={members}
             onClose={() => setSelectedTask(null)}
             onUpdateTask={handleUpdateTaskFromModal}
           />
