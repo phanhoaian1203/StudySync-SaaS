@@ -67,7 +67,33 @@ builder.Services.AddCors(options =>
 // ════════════════════════════════════════════════════════════════════
 // 4. SWAGGER — Tích hợp Bearer Token authentication
 // ════════════════════════════════════════════════════════════════════
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .ConfigureApiBehaviorOptions(options =>
+    {
+        // Ghi đè response mặc định của [ApiController] khi validation fail.
+        // Mục đích: Trả về cùng format { statusCode, message } với GlobalExceptionHandler
+        // thay vì ASP.NET default { type, title, errors } format.
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            // Lấy message của lỗi đầu tiên (ngắn gọn, dễ đọc)
+            var firstError = context.ModelState
+                .Where(x => x.Value?.Errors.Count > 0)
+                .SelectMany(x => x.Value!.Errors)
+                .Select(x => x.ErrorMessage)
+                .FirstOrDefault() ?? "Dữ liệu đầu vào không hợp lệ.";
+
+            return new Microsoft.AspNetCore.Mvc.ObjectResult(new
+            {
+                statusCode = StatusCodes.Status400BadRequest,
+                message    = firstError,
+                timestamp  = DateTime.UtcNow
+            })
+            {
+                StatusCode = StatusCodes.Status400BadRequest
+            };
+        };
+    });
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {

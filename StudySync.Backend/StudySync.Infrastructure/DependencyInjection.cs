@@ -31,6 +31,9 @@ public static class DependencyInjection
         // ── REPOSITORIES ────────────────────────────────────────────
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IWorkspaceRepository, WorkspaceRepository>();
+        services.AddScoped<IBoardRepository, BoardRepository>();
+        services.AddScoped<IColumnRepository, ColumnRepository>();
+        services.AddScoped<ITaskRepository, TaskRepository>();
 
         // ── UNIT OF WORK ────────────────────────────────────────────
         services.AddScoped<IUnitOfWork, UnitOfWork>();
@@ -38,6 +41,10 @@ public static class DependencyInjection
         // ── SERVICES ────────────────────────────────────────────────
         services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IWorkspaceService, WorkspaceService>();
+        services.AddScoped<IBoardService, BoardService>();
+        services.AddScoped<IColumnService, ColumnService>();
+        services.AddScoped<ITaskService, TaskService>();
 
         return services;
     }

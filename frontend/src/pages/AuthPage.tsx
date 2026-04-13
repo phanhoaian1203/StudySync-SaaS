@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { authService } from '../services/authService';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuthStore } from '../store/authStore';
 
 /* ─────────────────────────────────────────────────────────────────
    Design tokens
@@ -442,8 +443,9 @@ const AuthPage = () => {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
 
-  const navigate = useNavigate();
-  const location = useLocation();
+  const navigate  = useNavigate();
+  const location   = useLocation();
+  const login      = useAuthStore((state) => state.login);
 
   // ✅ FIX: Đọc từ URL path để xác định hiện Login hay Register
   const [isLogin, setIsLogin] = useState(location.pathname === '/login');
@@ -465,8 +467,8 @@ const AuthPage = () => {
     try {
       if (isLogin) {
         const res = await authService.login({ email, password });
-        localStorage.setItem('studySync_token', res.token);
-        localStorage.setItem('studySync_user', JSON.stringify(res));
+        // Dùng authStore.login() — cập nhật global state + localStorage
+        login(res);
         navigate('/dashboard');
       } else {
         await authService.register({ email, password, fullName });
@@ -474,9 +476,8 @@ const AuthPage = () => {
         switchTab(true);
       }
     } catch (err: any) {
-      // Xử lý đúng cấu trúc error response từ GlobalExceptionHandler
-      const serverMessage = err.response?.data?.message;
-      setError(serverMessage || 'Đã xảy ra lỗi, vui lòng thử lại.');
+      // ApiError.message đã được chuẩn hóa trong axiosClient interceptor
+      setError(err.message || 'Đã xảy ra lỗi, vui lòng thử lại.');
     } finally {
       setIsLoading(false);
     }
