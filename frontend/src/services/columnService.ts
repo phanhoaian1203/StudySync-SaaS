@@ -1,5 +1,5 @@
 import axiosClient from './axiosClient';
-import type { ColumnResponse, CreateColumnRequest } from '../types';
+import type { ColumnResponse, CreateColumnRequest, MoveColumnRequest } from '../types';
 
 export const columnService = {
   /**
@@ -19,4 +19,10 @@ export const columnService = {
    */
   delete: (columnId: string): Promise<void> =>
     axiosClient.delete(`/columns/${columnId}`),
+
+  /**
+   * Di chuyển vị trí Cột
+   */
+  moveColumn: (columnId: string, data: MoveColumnRequest): Promise<ColumnResponse> =>
+    axiosClient.put(`/columns/${columnId}/move`, data),
 };

@@ -81,6 +81,10 @@ export interface CreateColumnRequest {
   name: string;
 }
 
+export interface MoveColumnRequest {
+  orderIndex: number;
+}
+
 export interface CreateTaskRequest {
   columnId: string;
   title: string;
@@ -103,6 +107,7 @@ export interface TaskResponse {
   title: string;
   description?: string;
   dueDate?: string;
+  labels?: string;
   orderIndex: number;
   createdAt: string;
   assignees?: UserDto[];

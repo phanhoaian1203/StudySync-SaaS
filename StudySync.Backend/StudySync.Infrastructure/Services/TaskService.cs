@@ -48,6 +48,7 @@ public class TaskService : ITaskService
             Title = t.Title,
             Description = t.Description,
             DueDate = t.DueDate,
+            Labels = t.Labels,
             OrderIndex = t.OrderIndex,
             CreatedAt = t.CreatedAt,
             Assignees = t.Assignees.Select(a => new StudySync.Application.DTOs.User.UserDto
@@ -122,6 +123,8 @@ public class TaskService : ITaskService
         }
 
         task.UpdatedById = requestingUserId;
+        task.DueDate = request.DueDate;
+        task.Labels = request.Labels;
 
         _taskRepository.Update(task);
         await _unitOfWork.SaveChangesAsync();
@@ -182,6 +185,7 @@ public class TaskService : ITaskService
             Title = t.Title,
             Description = t.Description,
             DueDate = t.DueDate,
+            Labels = t.Labels,
             OrderIndex = t.OrderIndex,
             CreatedAt = t.CreatedAt,
             Assignees = t.Assignees.Select(a => new StudySync.Application.DTOs.User.UserDto

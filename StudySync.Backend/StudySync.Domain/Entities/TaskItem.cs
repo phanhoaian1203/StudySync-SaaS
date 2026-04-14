@@ -1,4 +1,4 @@
-﻿using StudySync.Domain.Common;
+using StudySync.Domain.Common;
 
 namespace StudySync.Domain.Entities;
 
@@ -8,6 +8,7 @@ public class TaskItem : BaseEntity
     public string Title { get; set; } = string.Empty;
     public string? Description { get; set; }
     public DateTime? DueDate { get; set; }
+    public string? Labels { get; set; }
     public double OrderIndex { get; set; }
 
     // Dấu vết kiểm toán (Audit Trail) - Rất quan trọng khi làm việc nhóm

@@ -8,5 +8,5 @@ public interface IColumnService
     Task<ColumnResponse> CreateAsync(CreateColumnRequest request, Guid requestingUserId);
     Task DeleteAsync(Guid columnId, Guid requestingUserId);
     
-    // Todo (Sprint 4): Cập nhật vị trí (Drag & Drop)
+    Task<ColumnResponse> MoveAsync(Guid columnId, MoveColumnRequest request, Guid requestingUserId);
 }

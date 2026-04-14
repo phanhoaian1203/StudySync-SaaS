@@ -42,6 +42,14 @@ public class ColumnsController : ControllerBase
         return NoContent();
     }
 
+    [HttpPut("{id:guid}/move")]
+    public async Task<ActionResult<ColumnResponse>> Move(Guid id, [FromBody] MoveColumnRequest request)
+    {
+        var userId = GetUserId();
+        var column = await _columnService.MoveAsync(id, request, userId);
+        return Ok(column);
+    }
+
     private Guid GetUserId()
     {
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;

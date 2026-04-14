@@ -7,6 +7,7 @@ public class TaskResponse
     public string Title { get; set; } = string.Empty;
     public string? Description { get; set; }
     public DateTime? DueDate { get; set; }
+    public string? Labels { get; set; }
     public double OrderIndex { get; set; }
     public DateTime CreatedAt { get; set; }
     

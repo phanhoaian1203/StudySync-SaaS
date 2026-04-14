@@ -23,7 +23,7 @@ export const taskService = {
   /**
    * Cập nhật chi tiết nội dung (Title, Description)
    */
-  updateDetails: (taskId: string, data: { title: string, description?: string }): Promise<TaskResponse> =>
+  updateDetails: (taskId: string, data: { title: string, description?: string, dueDate?: string, labels?: string }): Promise<TaskResponse> =>
     axiosClient.put(`/tasks/${taskId}/details`, data),
 
   /**

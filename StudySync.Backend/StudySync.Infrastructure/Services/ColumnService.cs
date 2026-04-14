@@ -44,7 +44,13 @@ public class ColumnService : IColumnService
                 Description = t.Description,
                 DueDate = t.DueDate,
                 OrderIndex = t.OrderIndex,
-                CreatedAt = t.CreatedAt
+                CreatedAt = t.CreatedAt,
+                Assignees = t.Assignees.Select(a => new StudySync.Application.DTOs.User.UserDto
+                {
+                    Id = a.User.Id,
+                    FullName = a.User.FullName,
+                    Email = a.User.Email
+                }).ToList()
             }).ToList()
         });
     }
@@ -86,5 +92,28 @@ public class ColumnService : IColumnService
         
         _columnRepository.Delete(column);
         await _unitOfWork.SaveChangesAsync();
+    }
+
+    public async Task<ColumnResponse> MoveAsync(Guid columnId, MoveColumnRequest request, Guid requestingUserId)
+    {
+        var column = await _columnRepository.GetByIdAsync(columnId)
+            ?? throw new NotFoundException("Column", columnId);
+
+        // Update vị trí
+        column.OrderIndex = request.OrderIndex;
+        // Bắt buộc set updated cho BaseEntity
+        _columnRepository.Update(column);
+
+        await _unitOfWork.SaveChangesAsync();
+
+        return new ColumnResponse
+        {
+            Id = column.Id,
+            BoardId = column.BoardId,
+            Name = column.Name,
+            OrderIndex = column.OrderIndex,
+            // Tasks chỉ cần trả list rỗng cho Move
+            Tasks = new List<TaskResponse>()
+        };
     }
 }

@@ -24,9 +24,19 @@ interface TaskModalProps {
   onUpdateTask: (updatedTask: TaskResponse) => void;
 }
 
+const PREDEFINED_LABELS = [
+  { id: '1', name: 'Khẩn cấp', color: '#ef4444' },
+  { id: '2', name: 'Tính năng', color: '#3b82f6' },
+  { id: '3', name: 'Bug', color: '#f59e0b' },
+  { id: '4', name: 'Nghiên cứu', color: '#a855f7' }
+];
+
 export default function TaskModal({ task, members, onClose, onUpdateTask }: TaskModalProps) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description || '');
+  const [dueDate, setDueDate] = useState<string>(task.dueDate ? new Date(task.dueDate).toISOString().slice(0, 16) : '');
+  const [labels, setLabels] = useState<any[]>(task.labels ? JSON.parse(task.labels) : []);
+  const [isEditingMode, setIsEditingMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showAssignDrop, setShowAssignDrop] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -34,18 +44,21 @@ export default function TaskModal({ task, members, onClose, onUpdateTask }: Task
   useEffect(() => {
     setTitle(task.title);
     setDescription(task.description || '');
+    setDueDate(task.dueDate ? new Date(task.dueDate).toISOString().slice(0, 16) : '');
+    setLabels(task.labels ? JSON.parse(task.labels) : []);
   }, [task]);
 
   // Handle auto-save locally to API when changed
-  const saveChanges = async (newTitle: string, newDesc: string) => {
+  const saveChanges = async (newTitle: string, newDesc: string, newDate?: string, newLabels?: string) => {
     if (!newTitle.trim()) return; // Don't save empty title
-    if (newTitle === task.title && newDesc === (task.description || '')) return;
 
     setIsSaving(true);
     try {
       const updated = await taskService.updateDetails(task.id, {
         title: newTitle.trim(),
-        description: newDesc.trim() || undefined
+        description: newDesc.trim() || undefined,
+        dueDate: newDate || undefined,
+        labels: newLabels || undefined
       });
       onUpdateTask(updated);
     } catch (e) {
@@ -55,20 +68,14 @@ export default function TaskModal({ task, members, onClose, onUpdateTask }: Task
     }
   };
 
-  // Debounce description typing logic (Save after 1.5s typing pause)
-  const handleDescriptionChange = (val?: string) => {
-    const newVal = val || '';
-    setDescription(newVal);
-
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(() => {
-      saveChanges(title, newVal);
-    }, 1500);
-  };
-
   // Immediate save on Blur (Title)
   const handleTitleBlur = () => {
-    saveChanges(title, description);
+    saveChanges(title, description, dueDate, labels.length ? JSON.stringify(labels) : undefined);
+  };
+  
+  const handleDescriptionBlur = () => {
+    setIsEditingMode(false);
+    saveChanges(title, description, dueDate, labels.length ? JSON.stringify(labels) : undefined);
   };
 
   const handleToggleAssignee = async (memberId: string) => {
@@ -95,7 +102,7 @@ export default function TaskModal({ task, members, onClose, onUpdateTask }: Task
         // Force save before closing if pending
         if (timeoutRef.current) {
            clearTimeout(timeoutRef.current);
-           saveChanges(title, description);
+           saveChanges(title, description, dueDate, labels.length ? JSON.stringify(labels) : undefined);
         }
         onClose();
       }}
@@ -151,17 +158,44 @@ export default function TaskModal({ task, members, onClose, onUpdateTask }: Task
               onMouseEnter={(e) => { if (document.activeElement !== e.target) (e.target as HTMLInputElement).style.background = C.hover; }}
             />
 
-            {/* Description MDEditor */}
-            <h3 style={{ fontSize: '15px', color: C.text, fontWeight: 600, marginBottom: '12px' }}>Văn bản mô tả</h3>
-            <div data-color-mode="dark">
-              <MDEditor
-                value={description}
-                onChange={handleDescriptionChange}
-                height={400}
-                previewOptions={{
-                  style: { background: 'transparent' }
-                }}
-              />
+            <div style={{ marginTop: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span style={{ fontSize: '13px', color: C.textMuted, display: 'block' }}>Mô tả</span>
+                {isEditingMode && (
+                   <button onClick={handleDescriptionBlur} style={{ background: C.accent, color: '#fff', border: 'none', padding: '4px 12px', fontSize: '12px', borderRadius: '4px', cursor: 'pointer' }}>
+                     Lưu mô tả
+                   </button>
+                )}
+              </div>
+
+              {!isEditingMode ? (
+                <div 
+                  onClick={() => setIsEditingMode(true)}
+                  style={{ 
+                    padding: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: `1px solid transparent`,
+                    minHeight: '60px', cursor: 'pointer', transition: 'border 0.2s'
+                  }}
+                  title="Nhấn để chỉnh sửa mô tả"
+                >
+                  {description ? (
+                     <div data-color-mode="dark">
+                       <MDEditor.Markdown source={description} style={{ backgroundColor: 'transparent', fontSize: '14px', color: C.text }} />
+                     </div>
+                  ) : (
+                     <span style={{ color: C.textMuted, fontSize: '14px', fontStyle: 'italic' }}>Thêm mô tả chi tiết...</span>
+                  )}
+                </div>
+              ) : (
+                <div data-color-mode="dark">
+                  <MDEditor
+                    value={description}
+                    onChange={val => setDescription(val || '')}
+                    preview="edit"
+                    height={300}
+                    style={{ backgroundColor: C.inputBg }}
+                  />
+                </div>
+              )}
             </div>
             
           </div>
@@ -174,8 +208,31 @@ export default function TaskModal({ task, members, onClose, onUpdateTask }: Task
             
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
                {task.assignees?.map(assignee => (
-                 <div key={assignee.id} title={assignee.fullName} style={{ width: '32px', height: '32px', borderRadius: '50%', background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', color: '#fff', fontWeight: 600 }}>
+                 <div 
+                    key={assignee.id} 
+                    title={assignee.fullName} 
+                    style={{ position: 'relative', width: '32px', height: '32px', borderRadius: '50%', background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', color: '#fff', fontWeight: 600, cursor: 'default' }}
+                    onMouseEnter={e => {
+                      const btn = e.currentTarget.querySelector('.remove-btn') as HTMLButtonElement;
+                      if(btn) btn.style.display = 'flex';
+                    }}
+                    onMouseLeave={e => {
+                      const btn = e.currentTarget.querySelector('.remove-btn') as HTMLButtonElement;
+                      if(btn) btn.style.display = 'none';
+                    }}
+                 >
                    {assignee.fullName.charAt(0).toUpperCase()}
+                   
+                   <button 
+                     className="remove-btn"
+                     onClick={() => handleToggleAssignee(assignee.id)}
+                     title="Xóa thành viên này"
+                     style={{
+                       display: 'none', position: 'absolute', top: '-4px', right: '-4px', width: '16px', height: '16px', borderRadius: '50%', background: '#ef4444', color: '#fff', border: '1px solid #fff', fontSize: '10px', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0
+                     }}
+                   >
+                     ✕
+                   </button>
                  </div>
                ))}
                
@@ -223,7 +280,48 @@ export default function TaskModal({ task, members, onClose, onUpdateTask }: Task
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                <div>
-                 <span style={{ fontSize: '13px', color: C.textMuted, display: 'block', marginBottom: '4px' }}>Trạng thái</span>
+                 <span style={{ fontSize: '13px', color: C.textMuted, display: 'block', marginBottom: '4px' }}>Hạn chót (Due Date)</span>
+                 <input 
+                   type="datetime-local" 
+                   value={dueDate}
+                   onChange={e => {
+                     setDueDate(e.target.value);
+                     saveChanges(title, description, e.target.value, labels.length ? JSON.stringify(labels) : undefined);
+                   }}
+                   style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: `1px solid ${C.border}`, color: C.text, padding: '8px', borderRadius: '6px', outline: 'none', fontSize: '13px', colorScheme: 'dark' }}
+                 />
+               </div>
+
+               <div style={{ marginTop: '16px' }}>
+                 <span style={{ fontSize: '13px', color: C.textMuted, display: 'block', marginBottom: '8px' }}>Nhãn màu</span>
+                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                   {PREDEFINED_LABELS.map(lbl => {
+                     const isActive = labels.some(l => l.id === lbl.id);
+                     return (
+                       <button
+                         key={lbl.id}
+                         onClick={() => {
+                           const newLabels = isActive ? labels.filter(l => l.id !== lbl.id) : [...labels, lbl];
+                           setLabels(newLabels);
+                           saveChanges(title, description, dueDate, newLabels.length ? JSON.stringify(newLabels) : undefined);
+                         }}
+                         style={{
+                           padding: '4px 10px', fontSize: '12px', borderRadius: '12px', border: 'none', cursor: 'pointer',
+                           background: isActive ? lbl.color : 'rgba(255,255,255,0.05)',
+                           color: isActive ? '#fff' : C.text,
+                           borderBottom: isActive ? 'none' : `2px solid ${lbl.color}`,
+                           transition: 'all 0.2s'
+                         }}
+                       >
+                         {lbl.name}
+                       </button>
+                     );
+                   })}
+                 </div>
+               </div>
+
+               <div style={{ marginTop: '16px' }}>
+                 <span style={{ fontSize: '13px', color: C.textMuted, display: 'block', marginBottom: '4px' }}>Trạng thái Bảng</span>
                  <div style={{ fontSize: '13px', padding: '4px 8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', display: 'inline-block' }}>
                    ID Bảng: {task.columnId.slice(0, 8)}...
                  </div>

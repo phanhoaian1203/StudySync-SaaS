@@ -51,6 +51,7 @@ const BoardPage = () => {
 
   // Mở Task Modal Detail
   const [selectedTask, setSelectedTask] = useState<TaskResponse | null>(null);
+  const [activeMenuTaskId, setActiveMenuTaskId] = useState<string | null>(null);
   const [members, setMembers] = useState<WorkspaceMemberResponse[]>([]);
   const [error, setError] = useState('');
 
@@ -73,37 +74,56 @@ const BoardPage = () => {
         const sortedCols = cData.map(col => ({
           ...col,
           tasks: col.tasks.sort((a, b) => a.orderIndex - b.orderIndex)
-        }));
+        })).sort((a, b) => a.orderIndex - b.orderIndex);
         setColumns(sortedCols);
       })
       .catch(e => console.error(e));
   }, [boardId]);
 
   // 2. Logic Kéo Thả (Drag & Drop)
-  const handleDragEnd = async (result: DropResult) => {
-    const { source, destination, draggableId } = result;
-
-    // Kéo thả ra ngoài cột hợp lệ
+  const onDragEnd = async (result: DropResult) => {
+    const { destination, source, draggableId, type } = result;
     if (!destination) return;
-    
-    // Không chuyển vị trí
-    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
+    if (destination.droppableId === source.droppableId && destination.index === source.index) return;
 
+    // A. Nếu đang kéo thả CỘT (COLUMN)
+    if (type === 'column') {
+      const newCols = Array.from(columns);
+      const [movedCol] = newCols.splice(source.index, 1);
+      newCols.splice(destination.index, 0, movedCol);
+
+      // Tính toán lại orderIndex
+      const prevOrder = destination.index > 0 ? newCols[destination.index - 1].orderIndex : 0;
+      const nextOrder = destination.index < newCols.length - 1 ? newCols[destination.index + 1].orderIndex : prevOrder + 2000;
+      const newOrderIndex = (prevOrder + nextOrder) / 2;
+
+      movedCol.orderIndex = newOrderIndex;
+      setColumns(newCols);
+
+      try {
+        await columnService.moveColumn(draggableId, { orderIndex: newOrderIndex });
+      } catch (e) {
+        console.error("Move column failed", e);
+        // Fallback reload cols if failed
+        if (boardId) columnService.getColumnsByBoardId(boardId).then(setColumns);
+      }
+      return;
+    }
+
+    // B. Nếu đang kéo thả THẺ (TASK)
     const sourceColId = source.droppableId;
     const destColId = destination.droppableId;
     const dropIndex = destination.index;
 
     // Tìm Card đang được kéo
-    let draggedTask: TaskResponse | undefined;
     const sourceCol = columns.find(c => c.id === sourceColId)!;
-    draggedTask = sourceCol.tasks.find(t => t.id === draggableId);
+    const draggedTask = sourceCol.tasks.find(t => t.id === draggableId);
     
     if (!draggedTask) return;
 
-    // BƯỚC 1: Tính toán OrderIndex mới (Thuật toán cân bằng số thập phân)
+    // BƯỚC 1: Tính toán OrderIndex mới
     let newOrderIndex = 0;
     const destCol = columns.find(c => c.id === destColId)!;
-    // Dọn các mảng tạm để tính toán (lọc bỏ chính nó nếu thả cùng cột)
     const cleanDestTasks = destColId === sourceColId 
       ? destCol.tasks.filter(t => t.id !== draggableId) 
       : [...destCol.tasks];
@@ -120,20 +140,17 @@ const BoardPage = () => {
       newOrderIndex = (prev + next) / 2;
     }
 
-    // BƯỚC 2: Cập nhật Optimistic UI (Giao diện tức thì)
+    // BƯỚC 2: Cập nhật Optimistic UI
     const updatedTask = { ...draggedTask, columnId: destColId, orderIndex: newOrderIndex };
     
     setColumns(prevCols => {
       const newCols = [...prevCols];
-      
-      // Xóa thẻ ở cột cũ
       const srcIdx = newCols.findIndex(c => c.id === sourceColId);
       newCols[srcIdx] = { 
         ...newCols[srcIdx], 
         tasks: newCols[srcIdx].tasks.filter(t => t.id !== draggableId)
       };
 
-      // Thêm thẻ vào cột mới ở đúng vị trí thả
       const destIdx = newCols.findIndex(c => c.id === destColId);
       const newDestTasks = [...newCols[destIdx].tasks];
       newDestTasks.splice(dropIndex, 0, updatedTask);
@@ -150,7 +167,6 @@ const BoardPage = () => {
       });
     } catch (e) {
       console.error("Lỗi đồng bộ Kéo thả", e);
-      // Optional: Nếu lỗi, fetch lại data để resync giao diện.
     }
   };
 
@@ -169,15 +185,21 @@ const BoardPage = () => {
     } catch (e) { console.error(e); }
   };
 
-  const handleAddColumn = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAddCol = async () => {
     if (!newColName.trim() || !boardId) return;
-
     try {
       const col = await columnService.create({ boardId, name: newColName.trim() });
-      setColumns([...columns, col]);
+      setColumns([...columns, { ...col, tasks: [] }]);
       setNewColName('');
       setAddingCol(false);
+    } catch (e) { console.error(e); }
+  };
+
+  const handleDeleteColumn = async (columnId: string) => {
+    if (!confirm("Xóa cột này?")) return;
+    try {
+      await columnService.delete(columnId);
+      setColumns(cols => cols.filter(c => c.id !== columnId));
     } catch (e) { console.error(e); }
   };
 
@@ -273,142 +295,195 @@ const BoardPage = () => {
         </div>
       )}
 
-      {/* ── Drag Context Khu Vực Kanban ngang ─── */}
+      {/* ── Bảng Kanban Khu Vực Kéo Thả ── */}
       {activeTab === 'board' && (
-      <DragDropContext onDragEnd={handleDragEnd}>
-        <div style={{ 
-          display: 'flex', gap: '20px', overflowX: 'auto', overflowY: 'hidden', 
-          flex: 1, paddingBottom: '16px' 
-        }}>
-          
-          {columns.map(col => {
-            const colColor = getColumnColor(col.name);
-            const isDoneCol = colColor === '#10b981'; // Check xem có phải cột Done không
-
-            return (
-            <div key={col.id} style={{ 
-              width: '320px', minWidth: '320px', maxHeight: '100%', display: 'flex', flexDirection: 'column',
-              background: C.colBg, borderRadius: '12px', border: `1px solid ${C.border}`,
-              borderTop: `4px solid ${colColor}` // Highlight màu trên đầu cột
-            }}>
+      <DragDropContext onDragEnd={onDragEnd}>
+        <Droppable droppableId="all-columns" direction="horizontal" type="column">
+          {(provided) => (
+            <div 
+              ref={provided.innerRef}
+              {...provided.droppableProps}
+              style={{ display: 'flex', gap: '24px', flex: 1, overflowX: 'auto', paddingBottom: '16px' }}
+            >
               
-              {/* Column Header */}
-              <div style={{ padding: '16px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0, color: C.text, fontSize: '15px', fontWeight: 600 }}>{col.name}</h3>
-                <span style={{ background: `${colColor}22`, padding: '2px 8px', borderRadius: '12px', fontSize: '12px', color: colColor, fontWeight: 700 }}>
-                  {col.tasks.length}
-                </span>
-              </div>
+              {columns.map((col, index) => {
+                const colColor = getColumnColor(col.name);
+                const isDoneCol = colColor === '#10b981';
 
-              {/* ── VÙNG THẢ (DROPPABLE) ─── */}
-              <Droppable droppableId={col.id}>
-                {(provided, snapshot) => (
-                  <div
-                    ref={provided.innerRef}
-                    {...provided.droppableProps}
-                    style={{ 
-                      flex: 1, overflowY: 'auto', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px',
-                      background: snapshot.isDraggingOver ? 'rgba(255,255,255,0.02)' : 'transparent',
-                      transition: 'background 0.2s ease',
-                      minHeight: '10px' // Đảm bảo luôn Drop được kể cả rỗng
-                    }}
-                  >
-                    {col.tasks.map((task, index) => (
-                      
-                      /* ── THẺ KÉO (DRAGGABLE) ─── */
-                      <Draggable key={task.id} draggableId={task.id} index={index}>
+                return (
+                  <Draggable key={col.id} draggableId={col.id} index={index}>
+                  {(providedCol, snapshotCol) => (
+                    <div 
+                      ref={providedCol.innerRef}
+                      {...providedCol.draggableProps}
+                      style={{ 
+                        flex: 1, minWidth: '220px', maxWidth: '100%', display: 'flex', flexDirection: 'column', 
+                        background: 'rgba(255,255,255,0.02)', borderRadius: '12px', 
+                        border: snapshotCol.isDragging ? `2px solid ${C.accent}` : `1px solid ${C.border}`,
+                        overflow: 'hidden', height: '100%',
+                        boxShadow: snapshotCol.isDragging ? '0 12px 24px rgba(0,0,0,0.4)' : 'none',
+                        ...providedCol.draggableProps.style
+                      }}
+                    >
+                      {/* Header Cột -> Dùng làm tay nắm Drag Handle */}
+                      <div 
+                        {...providedCol.dragHandleProps}
+                        style={{ padding: '16px', borderBottom: `1px solid ${colColor}20`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: `linear-gradient(180deg, ${colColor}15 0%, transparent 100%)` }}
+                      >
+                        <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: C.text, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: colColor }}></div>
+                          {col.name}
+                          <span style={{ fontSize: '12px', background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '12px', color: C.textMuted, marginLeft: '4px' }}>
+                            {col.tasks.length}
+                          </span>
+                        </h3>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button onClick={() => handleDeleteColumn(col.id)} style={{ background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '16px', opacity: 0.7 }} title="Xóa Cột">×</button>
+                        </div>
+                      </div>
+
+                      {/* ── VÙNG THẢ (DROPPABLE) ─── */}
+                      <Droppable droppableId={col.id}>
                         {(provided, snapshot) => (
                           <div
                             ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            {...provided.dragHandleProps}
-                            onClick={() => setSelectedTask(task)} // Click Mở Modal
-                            style={{
-                              background: snapshot.isDragging ? 'rgba(30,41,59,0.95)' : C.cardBg,
-                              borderRadius: '8px', padding: '12px',
-                              border: snapshot.isDragging ? `1px solid ${C.accent}` : `1px solid ${C.border}`,
-                              boxShadow: snapshot.isDragging ? '0 12px 24px rgba(0,0,0,0.5)' : 'none',
-                              backdropFilter: snapshot.isDragging ? 'blur(10px)' : 'none',
-                              position: 'relative',
-                              cursor: 'pointer',
-                              ...provided.draggableProps.style // Quan trọng: giữ style inline của dnd
+                            {...provided.droppableProps}
+                            style={{ 
+                              flex: 1, overflowY: 'auto', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px',
+                              background: snapshot.isDraggingOver ? 'rgba(255,255,255,0.02)' : 'transparent',
+                              transition: 'background 0.2s ease',
+                              minHeight: '10px'
                             }}
                           >
-                            <span style={{ fontSize: '14px', color: isDoneCol ? C.textMuted : C.text, textDecoration: isDoneCol ? 'line-through' : 'none' }}>
-                              {task.title}
-                            </span>
+                            {col.tasks.map((task, index) => (
+                              <Draggable key={task.id} draggableId={task.id} index={index}>
+                                {(provided, snapshot) => (
+                                  <div
+                                    ref={provided.innerRef}
+                                    {...provided.draggableProps}
+                                    {...provided.dragHandleProps}
+                                    onClick={() => setSelectedTask(task)}
+                                    style={{
+                                      background: snapshot.isDragging ? 'rgba(30,41,59,0.95)' : C.cardBg,
+                                      borderRadius: '8px', padding: '12px',
+                                      border: snapshot.isDragging ? `1px solid ${C.accent}` : `1px solid ${C.border}`,
+                                      boxShadow: snapshot.isDragging ? '0 12px 24px rgba(0,0,0,0.5)' : 'none',
+                                      position: 'relative',
+                                      cursor: 'pointer',
+                                      ...provided.draggableProps.style
+                                    }}
+                                  >
+                                    {(() => {
+                                      const parsedLabels = task.labels ? JSON.parse(task.labels) : [];
+                                      const isOverdue = task.dueDate && new Date(task.dueDate).getTime() < new Date().getTime() && !isDoneCol;
+                                      return (
+                                        <>
+                                          {parsedLabels.length > 0 && (
+                                            <div style={{ display: 'flex', gap: '4px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                                              {parsedLabels.map((l: any) => (
+                                                <div key={l.id} style={{ height: '8px', width: '32px', borderRadius: '4px', background: l.color }} title={l.name} />
+                                              ))}
+                                            </div>
+                                          )}
+                                          
+                                          <div style={{ paddingRight: '20px' }}>
+                                            <span style={{ fontSize: '14px', color: isDoneCol ? C.textMuted : C.text, textDecoration: isDoneCol ? 'line-through' : 'none', lineHeight: 1.4 }}>
+                                              {task.title}
+                                            </span>
+                                          </div>
+                                          
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
+                                            {task.dueDate ? (
+                                              <div style={{ fontSize: '11px', fontWeight: 600, color: isOverdue ? '#ef4444' : C.textMuted, background: isOverdue ? 'rgba(239, 68, 68, 0.1)' : 'rgba(255,255,255,0.05)', padding: '4px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                ⏱ {new Date(task.dueDate).toLocaleDateString('vi-VN')}
+                                              </div>
+                                            ) : <div/>}
 
-                            {/* Hiển thị avatar người được gán */}
-                            {task.assignees && task.assignees.length > 0 && (
-                               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
-                                 {task.assignees.map(a => (
-                                    <div key={a.id} title={a.fullName} style={{ width: '24px', height: '24px', borderRadius: '50%', background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#fff', marginLeft: '-6px', border: `2px solid ${C.cardBg}` }}>
-                                      {a.fullName.charAt(0).toUpperCase()}
-                                    </div>
-                                 ))}
-                               </div>
-                            )}
-                            
-                            {/* Nút xóa */}
-                            {!snapshot.isDragging && (
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); handleDeleteTask(col.id, task.id); }}
-                                style={{ position: 'absolute', top: '8px', right: '8px', background: 'none', border: 'none', color: C.textMuted, cursor: 'pointer', fontSize: '12px' }}
-                              >
-                                ✕
-                              </button>
-                            )}
-                            {task.description && (
-                              <div style={{ color: C.textMuted, fontSize: '12px', marginTop: '8px' }}>≡ Có mô tả</div>
-                            )}
+                                            {task.assignees && task.assignees.length > 0 && (
+                                              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                                {task.assignees.map(a => (
+                                                    <div key={a.id} title={a.fullName} style={{ width: '24px', height: '24px', borderRadius: '50%', background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#fff', marginLeft: '-6px', border: `2px solid ${C.cardBg}` }}>
+                                                      {a.fullName.charAt(0).toUpperCase()}
+                                                    </div>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </>
+                                      );
+                                    })()}
+                                    {!snapshot.isDragging && (
+                                      <div style={{ position: 'absolute', top: '8px', right: '8px' }}>
+                                        <button 
+                                          onClick={(e) => { e.stopPropagation(); setActiveMenuTaskId(activeMenuTaskId === task.id ? null : task.id); }}
+                                          style={{ background: 'transparent', border: 'none', color: C.textMuted, cursor: 'pointer', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', borderRadius: '4px', ...({ ':hover': { background: 'rgba(255,255,255,0.1)' } } as any) }}
+                                        >
+                                          <span style={{ position: 'relative', top: '-4px' }}>...</span>
+                                        </button>
+                                        
+                                        {activeMenuTaskId === task.id && (
+                                          <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', background: C.colBg || '#1e293b', border: `1px solid ${C.border}`, borderRadius: '8px', padding: '4px', zIndex: 50, width: '140px', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
+                                             <button 
+                                               onClick={(e) => { e.stopPropagation(); handleDeleteTask(col.id, task.id); }}
+                                               style={{ width: '100%', textAlign: 'left', padding: '8px 12px', background: 'transparent', border: 'none', color: '#ef4444', fontSize: '13px', cursor: 'pointer', borderRadius: '4px', ...({ ':hover': { background: 'rgba(239, 68, 68, 0.1)' } } as any) }}
+                                             >
+                                                🗑 Xóa thẻ này
+                                             </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </Draggable>
+                            ))}
+                            {provided.placeholder}
                           </div>
                         )}
-                      </Draggable>
+                      </Droppable>
 
-                    ))}
-                    {provided.placeholder}
+                      {/* Add Task Input */}
+                      <div style={{ padding: '12px', borderTop: `1px solid ${C.border}` }}>
+                        <input
+                          value={newTaskTitle[col.id] || ''}
+                          onChange={e => setNewTaskTitle({ ...newTaskTitle, [col.id]: e.target.value })}
+                          onKeyDown={e => { if (e.key === 'Enter') handleAddTask(col.id); }}
+                          placeholder="+ Thêm công việc..."
+                          style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', color: C.text, fontSize: '13px' }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  </Draggable>
+                );
+              })}
+              
+              {/* Nút Tạo Cột Mới Nhỏ Gọn */}
+              <div style={{ flex: '0 0 auto' }}>
+                {addingCol ? (
+                  <div style={{ width: '240px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', padding: '12px', border: `1px dashed ${C.border}` }}>
+                    <input autoFocus value={newColName} onChange={e => setNewColName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddCol()} placeholder="Nhập tên cột..." style={{ width: '100%', marginBottom: '8px', padding: '8px 12px', borderRadius: '6px', border: `1px solid ${C.border}`, background: 'rgba(0,0,0,0.2)', color: C.text, outline: 'none', fontSize: '13px' }} />
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button onClick={handleAddCol} style={{ flex: 1, padding: '6px', background: C.accent, color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}>Lưu</button>
+                      <button onClick={() => { setAddingCol(false); setNewColName(''); }} style={{ flex: 1, padding: '6px', background: 'transparent', color: C.textMuted, border: `1px solid ${C.border}`, borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}>Hủy</button>
+                    </div>
                   </div>
+                ) : (
+                  <button 
+                    onClick={() => setAddingCol(true)} 
+                    title="Tạo cột mới"
+                    style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', border: `1px dashed ${C.border}`, color: C.textMuted, cursor: 'pointer', fontSize: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', marginTop: '4px' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = C.accent; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = C.accent; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = C.textMuted; e.currentTarget.style.borderColor = C.border; }}
+                  >
+                    +
+                  </button>
                 )}
-              </Droppable>
-
-              {/* Add Task Input */}
-              <div style={{ padding: '12px', borderTop: `1px solid ${C.border}` }}>
-                <input
-                  value={newTaskTitle[col.id] || ''}
-                  onChange={e => setNewTaskTitle({ ...newTaskTitle, [col.id]: e.target.value })}
-                  onKeyDown={e => { if (e.key === 'Enter') handleAddTask(col.id); }}
-                  placeholder="+ Thêm công việc..."
-                  style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', color: C.text, fontSize: '13px' }}
-                />
               </div>
+
             </div>
-            );
-          })}
-
-          {/* ── Cột [+] Thêm ─── */}
-          <div style={{ width: '320px', minWidth: '320px' }}>
-            {!addingCol ? (
-              <button 
-                onClick={() => setAddingCol(true)}
-                style={{ width: '100%', padding: '16px', background: 'rgba(255,255,255,0.05)', border: `1px dashed ${C.border}`, borderRadius: '12px', color: C.text, fontSize: '14px', fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}
-              >
-                + Thêm Cột Mới
-              </button>
-            ) : (
-              <form onSubmit={handleAddColumn} style={{ background: C.colBg, padding: '12px', borderRadius: '12px', border: `1px solid ${C.border}` }}>
-                <input 
-                  autoFocus value={newColName} onChange={e => setNewColName(e.target.value)} placeholder="Tên cột..."
-                  style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: `1px solid ${C.border}`, borderRadius: '6px', padding: '8px', color: C.text, fontSize: '14px', outline: 'none', marginBottom: '8px' }}
-                />
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button type="submit" style={{ flex: 1, padding: '8px', background: C.accent, color: '#fff', border: 'none', borderRadius: '6px', fontSize: '13px', cursor: 'pointer' }}>Lưu</button>
-                  <button type="button" onClick={() => setAddingCol(false)} style={{ flex: 1, padding: '8px', background: 'transparent', color: C.textMuted, border: `1px solid ${C.border}`, borderRadius: '6px', fontSize: '13px', cursor: 'pointer' }}>Huỷ</button>
-                </div>
-              </form>
-            )}
-          </div>
-
-        </div>
+          )}
+        </Droppable>
       </DragDropContext>
       )}
 
