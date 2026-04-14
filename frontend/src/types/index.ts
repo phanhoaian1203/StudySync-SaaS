@@ -111,6 +111,15 @@ export interface TaskResponse {
   orderIndex: number;
   createdAt: string;
   assignees?: UserDto[];
+  comments?: TaskCommentResponse[];
+}
+
+export interface TaskCommentResponse {
+  id: string;
+  taskItemId: string;
+  content: string;
+  createdAt: string;
+  user: UserDto;
 }
 
 export interface ColumnResponse {

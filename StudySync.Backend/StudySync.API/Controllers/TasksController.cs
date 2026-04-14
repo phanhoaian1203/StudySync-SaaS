@@ -59,11 +59,19 @@ public class TasksController : ControllerBase
     }
 
     [HttpDelete("{id:guid}/assignees/{userIdToUnassign:guid}")]
-    public async Task<ActionResult<TaskResponse>> UnassignUser(Guid id, Guid userIdToUnassign)
+    public async Task<IActionResult> UnassignUser(Guid id, Guid userIdToUnassign)
     {
         var userId = GetUserId();
         var task = await _taskService.UnassignUserAsync(id, userIdToUnassign, userId);
         return Ok(task);
+    }
+
+    [HttpPost("{id:guid}/comments")]
+    public async Task<IActionResult> AddComment(Guid id, [FromBody] CreateCommentRequest request)
+    {
+        var userId = GetUserId();
+        var comment = await _taskService.AddCommentAsync(id, request, userId);
+        return Ok(comment);
     }
 
     private Guid GetUserId()

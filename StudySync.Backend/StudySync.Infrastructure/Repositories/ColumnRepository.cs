@@ -27,6 +27,9 @@ public class ColumnRepository : IColumnRepository
             .Include(c => c.Tasks.Where(t => !t.IsDeleted).OrderBy(t => t.OrderIndex))
                 .ThenInclude(t => t.Assignees)
                     .ThenInclude(a => a.User)
+            .Include(c => c.Tasks.Where(t => !t.IsDeleted).OrderBy(t => t.OrderIndex))
+                .ThenInclude(t => t.Comments)
+                    .ThenInclude(cmt => cmt.User)
             .Where(c => c.BoardId == boardId && !c.IsDeleted)
             .OrderBy(c => c.OrderIndex)
             .ToListAsync();

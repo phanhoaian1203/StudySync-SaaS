@@ -18,4 +18,5 @@ public class TaskItem : BaseEntity
     // Navigation Properties
     public Column Column { get; set; } = null!;
     public ICollection<TaskAssignee> Assignees { get; set; } = new List<TaskAssignee>();
+    public ICollection<TaskComment> Comments { get; set; } = new List<TaskComment>();
 }

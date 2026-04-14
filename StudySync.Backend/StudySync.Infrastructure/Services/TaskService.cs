@@ -33,10 +33,12 @@ public class TaskService : ITaskService
     {
         // Bỏ qua Security Check tạm thời để tập trung vào Assignees logic
 
-        // Lấy danh sách task kèm Assignees
+        // Lấy danh sách task kèm Assignees và Comments
         var tasks = await _context.TaskItems
             .Include(t => t.Assignees)
                 .ThenInclude(a => a.User)
+            .Include(t => t.Comments)
+                .ThenInclude(c => c.User)
             .Where(t => t.ColumnId == columnId && !t.IsDeleted)
             .OrderBy(t => t.OrderIndex)
             .ToListAsync();
@@ -56,6 +58,19 @@ public class TaskService : ITaskService
                 Id = a.User.Id,
                 FullName = a.User.FullName,
                 Email = a.User.Email
+            }).ToList(),
+            Comments = t.Comments.OrderBy(c => c.CreatedAt).Select(c => new TaskCommentResponse
+            {
+                Id = c.Id,
+                TaskItemId = c.TaskItemId,
+                Content = c.Content,
+                CreatedAt = c.CreatedAt,
+                User = new StudySync.Application.DTOs.User.UserDto
+                {
+                    Id = c.User.Id,
+                    FullName = c.User.FullName,
+                    Email = c.User.Email
+                }
             }).ToList()
         });
     }
@@ -170,12 +185,50 @@ public class TaskService : ITaskService
         return await GetTaskResponseMappedById(taskId);
     }
 
+    // Nạp Comment mới
+    public async Task<TaskCommentResponse> AddCommentAsync(Guid taskId, CreateCommentRequest request, Guid requestingUserId)
+    {
+        var task = await _taskRepository.GetByIdAsync(taskId)
+             ?? throw new NotFoundException("Task", taskId);
+
+        var newComment = new TaskComment
+        {
+            TaskItemId = taskId,
+            UserId = requestingUserId,
+            Content = request.Content.Trim()
+        };
+
+        await _context.TaskComments.AddAsync(newComment);
+        await _unitOfWork.SaveChangesAsync();
+
+        // Trả về kèm thông tin người dùng
+        var commentWithUser = await _context.TaskComments
+            .Include(c => c.User)
+            .FirstOrDefaultAsync(c => c.Id == newComment.Id);
+
+        return new TaskCommentResponse
+        {
+            Id = commentWithUser!.Id,
+            TaskItemId = commentWithUser.TaskItemId,
+            Content = commentWithUser.Content,
+            CreatedAt = commentWithUser.CreatedAt,
+            User = new StudySync.Application.DTOs.User.UserDto
+            {
+                Id = commentWithUser.User.Id,
+                FullName = commentWithUser.User.FullName,
+                Email = commentWithUser.User.Email
+            }
+        };
+    }
+
     // Helper map Data full Assignees
     private async Task<TaskResponse> GetTaskResponseMappedById(Guid taskId)
     {
         var t = await _context.TaskItems
             .Include(x => x.Assignees)
                 .ThenInclude(a => a.User)
+            .Include(x => x.Comments)
+                .ThenInclude(c => c.User)
             .FirstOrDefaultAsync(x => x.Id == taskId);
 
         return new TaskResponse
@@ -193,6 +246,19 @@ public class TaskService : ITaskService
                 Id = a.User.Id,
                 FullName = a.User.FullName,
                 Email = a.User.Email
+            }).ToList(),
+            Comments = t.Comments.OrderBy(c => c.CreatedAt).Select(c => new TaskCommentResponse
+            {
+                Id = c.Id,
+                TaskItemId = c.TaskItemId,
+                Content = c.Content,
+                CreatedAt = c.CreatedAt,
+                User = new StudySync.Application.DTOs.User.UserDto
+                {
+                    Id = c.User.Id,
+                    FullName = c.User.FullName,
+                    Email = c.User.Email
+                }
             }).ToList()
         };
     }

@@ -12,4 +12,5 @@ public class TaskResponse
     public DateTime CreatedAt { get; set; }
     
     public List<StudySync.Application.DTOs.User.UserDto> Assignees { get; set; } = new();
+    public List<TaskCommentResponse> Comments { get; set; } = new();
 }

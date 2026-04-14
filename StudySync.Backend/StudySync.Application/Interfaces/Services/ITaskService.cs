@@ -14,4 +14,7 @@ public interface ITaskService
 
     Task<TaskResponse> AssignUserAsync(Guid taskId, AssignTaskRequest request, Guid requestingUserId);
     Task<TaskResponse> UnassignUserAsync(Guid taskId, Guid userIdToUnassign, Guid requestingUserId);
+
+    // Comment Flow
+    Task<TaskCommentResponse> AddCommentAsync(Guid taskId, CreateCommentRequest request, Guid requestingUserId);
 }

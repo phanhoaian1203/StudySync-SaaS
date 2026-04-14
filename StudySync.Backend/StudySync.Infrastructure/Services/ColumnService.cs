@@ -43,6 +43,7 @@ public class ColumnService : IColumnService
                 Title = t.Title,
                 Description = t.Description,
                 DueDate = t.DueDate,
+                Labels = t.Labels,
                 OrderIndex = t.OrderIndex,
                 CreatedAt = t.CreatedAt,
                 Assignees = t.Assignees.Select(a => new StudySync.Application.DTOs.User.UserDto
@@ -50,6 +51,19 @@ public class ColumnService : IColumnService
                     Id = a.User.Id,
                     FullName = a.User.FullName,
                     Email = a.User.Email
+                }).ToList(),
+                Comments = t.Comments.OrderBy(c => c.CreatedAt).Select(c => new TaskCommentResponse
+                {
+                    Id = c.Id,
+                    TaskItemId = t.Id,
+                    Content = c.Content,
+                    CreatedAt = c.CreatedAt,
+                    User = new StudySync.Application.DTOs.User.UserDto
+                    {
+                        Id = c.User.Id,
+                        FullName = c.User.FullName,
+                        Email = c.User.Email
+                    }
                 }).ToList()
             }).ToList()
         });

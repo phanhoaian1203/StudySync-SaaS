@@ -36,5 +36,11 @@ export const taskService = {
    * Gỡ người khỏi task
    */
   unassignUser: (taskId: string, userIdToUnassign: string): Promise<TaskResponse> =>
-    axiosClient.delete(`/tasks/${taskId}/assignees/${userIdToUnassign}`)
+    axiosClient.delete(`/tasks/${taskId}/assignees/${userIdToUnassign}`),
+
+  /**
+   * Đăng bình luận
+   */
+  addComment: (taskId: string, content: string): Promise<any> =>
+    axiosClient.post(`/tasks/${taskId}/comments`, { content })
 };

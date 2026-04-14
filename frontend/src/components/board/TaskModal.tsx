@@ -36,6 +36,8 @@ export default function TaskModal({ task, members, onClose, onUpdateTask }: Task
   const [description, setDescription] = useState(task.description || '');
   const [dueDate, setDueDate] = useState<string>(task.dueDate ? new Date(task.dueDate).toISOString().slice(0, 16) : '');
   const [labels, setLabels] = useState<any[]>(task.labels ? JSON.parse(task.labels) : []);
+  const [comments, setComments] = useState<any[]>(task.comments || []);
+  const [commentText, setCommentText] = useState('');
   const [isEditingMode, setIsEditingMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showAssignDrop, setShowAssignDrop] = useState(false);
@@ -46,7 +48,23 @@ export default function TaskModal({ task, members, onClose, onUpdateTask }: Task
     setDescription(task.description || '');
     setDueDate(task.dueDate ? new Date(task.dueDate).toISOString().slice(0, 16) : '');
     setLabels(task.labels ? JSON.parse(task.labels) : []);
+    setComments(task.comments || []);
   }, [task]);
+
+  const handlePostComment = async () => {
+    if (!commentText.trim()) return;
+    try {
+      const newCmt = await taskService.addComment(task.id, commentText);
+      const newCommentsList = [...comments, newCmt];
+      setComments(newCommentsList);
+      setCommentText('');
+      
+      // Khắc phục lỗi MẤT DỮ LIỆU BÌNH LUẬN: Đẩy ngược dữ liệu danh sách comment mới lên Component Cha (BoardPage)
+      onUpdateTask({ ...task, comments: newCommentsList });
+    } catch {
+      alert('Lỗi đăng bình luận!');
+    }
+  };
 
   // Handle auto-save locally to API when changed
   const saveChanges = async (newTitle: string, newDesc: string, newDate?: string, newLabels?: string) => {
@@ -196,6 +214,62 @@ export default function TaskModal({ task, members, onClose, onUpdateTask }: Task
                   />
                 </div>
               )}
+            </div>
+            
+            {/* COMMENTS ACTIVITY SECTION */}
+            <div style={{ marginTop: '32px' }}>
+              <h4 style={{ fontSize: '13px', fontWeight: 600, color: C.text, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>Hoạt động</span>
+              </h4>
+
+              {/* Nhập Comment */}
+              <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: C.accent, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', color: '#fff', fontWeight: 'bold' }}>
+                  ME
+                </div>
+                <div style={{ flex: 1 }}>
+                  <textarea
+                    value={commentText}
+                    onChange={e => setCommentText(e.target.value)}
+                    placeholder="Viết bình luận..."
+                    style={{ width: '100%', minHeight: '60px', background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}`, borderRadius: '8px', padding: '12px', color: C.text, fontSize: '14px', outline: 'none', resize: 'vertical' }}
+                    onKeyDown={e => {
+                       if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handlePostComment();
+                       }
+                    }}
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+                    <button onClick={handlePostComment} style={{ background: C.accent, color: '#fff', border: 'none', padding: '6px 16px', fontSize: '13px', borderRadius: '4px', cursor: 'pointer', opacity: commentText.trim() ? 1 : 0.5 }} disabled={!commentText.trim()}>
+                      Lưu
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Danh sách Comment */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {comments.map(cmt => (
+                   <div key={cmt.id} style={{ display: 'flex', gap: '12px' }}>
+                     <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#334155', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', color: '#fff' }}>
+                        {cmt.user.fullName.charAt(0).toUpperCase()}
+                     </div>
+                     <div style={{ flex: 1 }}>
+                       <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '4px' }}>
+                         <span style={{ fontSize: '14px', fontWeight: 600, color: C.text }}>{cmt.user.fullName}</span>
+                         <span style={{ fontSize: '12px', color: C.textMuted }}>
+                            {new Date(cmt.createdAt).toLocaleString('vi-VN')}
+                         </span>
+                       </div>
+                       <div style={{ fontSize: '14px', color: C.text, lineHeight: 1.5, background: 'rgba(255,255,255,0.05)', padding: '8px 12px', borderRadius: '0 8px 8px 8px', width: 'fit-content', border: `1px solid ${C.border}` }}>
+                         {cmt.content.split('\n').map((line: string, i: number) => <div key={i}>{line}</div>)}
+                       </div>
+                     </div>
+                   </div>
+                ))}
+                {comments.length === 0 && <span style={{ color: C.textMuted, fontSize: '13px', fontStyle: 'italic' }}>Chưa có bình luận nào.</span>}
+              </div>
             </div>
             
           </div>
