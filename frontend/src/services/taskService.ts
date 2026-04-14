@@ -42,5 +42,22 @@ export const taskService = {
    * Đăng bình luận
    */
   addComment: (taskId: string, content: string): Promise<any> =>
-    axiosClient.post(`/tasks/${taskId}/comments`, { content })
+    axiosClient.post(`/tasks/${taskId}/comments`, { content }),
+
+  /**
+   * Tải tài liệu đính kèm lên Cloudinary qua Backend
+   */
+  uploadAttachment: (taskId: string, file: File): Promise<any> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return axiosClient.post(`/tasks/${taskId}/attachments`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+
+  /**
+   * Xóa đính kèm
+   */
+  deleteAttachment: (taskId: string, attachmentId: string): Promise<void> =>
+    axiosClient.delete(`/tasks/${taskId}/attachments/${attachmentId}`)
 };

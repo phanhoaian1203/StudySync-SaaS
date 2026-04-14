@@ -41,6 +41,11 @@ const BoardPage = () => {
   const [columns, setColumns] = useState<ColumnResponse[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Filter States (Sprint 10)
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterMemberId, setFilterMemberId] = useState<string | null>(null);
+  const [filterLabel, setFilterLabel] = useState<string | null>(null);
+
   // Tabs Project Jira-like
   const [activeTab, setActiveTab] = useState<'summary' | 'backlog' | 'board'>('board');
 
@@ -121,12 +126,35 @@ const BoardPage = () => {
     
     if (!draggedTask) return;
 
-    // BƯỚC 1: Tính toán OrderIndex mới
+    // BƯỚC 1: Tính toán OrderIndex mới TRÊN DANH SÁCH FILTERED (Nếu đang Filter)
+    
+    // Tạo getter columns
+    const getVisibleTasks = (colId: string) => {
+      let tasks = columns.find(c => c.id === colId)!.tasks;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        tasks = tasks.filter(t => t.title.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q));
+      }
+      if (filterMemberId) {
+        if (filterMemberId === 'unassigned') tasks = tasks.filter(t => !t.assignees || t.assignees.length === 0);
+        else tasks = tasks.filter(t => t.assignees?.some(a => a.id === filterMemberId));
+      }
+      if (filterLabel) {
+        tasks = tasks.filter(t => {
+           if (!t.labels) return false;
+           try { const parsed = JSON.parse(t.labels); return parsed.some((l: any) => l.name === filterLabel); } catch { return false; }
+        });
+      }
+      return tasks;
+    };
+
     let newOrderIndex = 0;
-    const destCol = columns.find(c => c.id === destColId)!;
+    
+    // Nếu đang Lọc, ta phải tham chiếu OrderIndex dựa trên các Thẻ Đang Hiển Thị
+    const visibleDestTasks = getVisibleTasks(destColId);
     const cleanDestTasks = destColId === sourceColId 
-      ? destCol.tasks.filter(t => t.id !== draggableId) 
-      : [...destCol.tasks];
+      ? visibleDestTasks.filter(t => t.id !== draggableId) 
+      : [...visibleDestTasks];
 
     if (cleanDestTasks.length === 0) {
       newOrderIndex = 1000;
@@ -140,20 +168,25 @@ const BoardPage = () => {
       newOrderIndex = (prev + next) / 2;
     }
 
-    // BƯỚC 2: Cập nhật Optimistic UI
+    // BƯỚC 2: Cập nhật Optimistic UI (Tuyệt đối không dùng splice theo Index khi có Filter)
     const updatedTask = { ...draggedTask, columnId: destColId, orderIndex: newOrderIndex };
     
     setColumns(prevCols => {
       const newCols = [...prevCols];
+      
+      // Xóa ở cột Nguồn
       const srcIdx = newCols.findIndex(c => c.id === sourceColId);
       newCols[srcIdx] = { 
         ...newCols[srcIdx], 
         tasks: newCols[srcIdx].tasks.filter(t => t.id !== draggableId)
       };
 
+      // Thêm vào cột Đích và Sort lại toàn bộ bằng OrderIndex (Tránh bug Splice sai dòng khi Filter)
       const destIdx = newCols.findIndex(c => c.id === destColId);
-      const newDestTasks = [...newCols[destIdx].tasks];
-      newDestTasks.splice(dropIndex, 0, updatedTask);
+      const newDestTasks = newCols[destIdx].tasks.filter(t => t.id !== draggableId); // Xóa bản cũ nếu kéo trong cùng cột
+      newDestTasks.push(updatedTask);
+      newDestTasks.sort((a,b) => a.orderIndex - b.orderIndex);
+      
       newCols[destIdx] = { ...newCols[destIdx], tasks: newDestTasks };
 
       return newCols;
@@ -226,6 +259,29 @@ const BoardPage = () => {
     setSelectedTask(prev => prev && prev.id === updatedTask.id ? updatedTask : prev);
   };
 
+  // ── FILTER COMPUTATION ──────────────────────────────────────────────
+  const filteredColumns = columns.map(col => {
+    let tasks = col.tasks;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      tasks = tasks.filter(t => t.title.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q));
+    }
+    if (filterMemberId) {
+      if (filterMemberId === 'unassigned') tasks = tasks.filter(t => !t.assignees || t.assignees.length === 0);
+      else tasks = tasks.filter(t => t.assignees?.some(a => a.id === filterMemberId));
+    }
+    if (filterLabel) {
+      tasks = tasks.filter(t => {
+         if (!t.labels) return false;
+         try { const parsed = JSON.parse(t.labels); return parsed.some((l: any) => l.name === filterLabel); } catch { return false; }
+      });
+    }
+    return { ...col, tasks };
+  });
+
+  const totalFilteredTasks = filteredColumns.reduce((sum, col) => sum + col.tasks.length, 0);
+  const isFiltering = searchQuery.trim() !== '' || filterMemberId !== null || filterLabel !== null;
+
   // ── RENDER ──────────────────────────────────────────────────────────
   if (loading) return <div style={{ color: C.text }}>Đang tải Kanban Board...</div>;
   if (!board) return <div style={{ color: '#fca5a5' }}>{error || 'Không tìm thấy Board.'}</div>;
@@ -297,21 +353,60 @@ const BoardPage = () => {
 
       {/* ── Bảng Kanban Khu Vực Kéo Thả ── */}
       {activeTab === 'board' && (
-      <DragDropContext onDragEnd={onDragEnd}>
-        <Droppable droppableId="all-columns" direction="horizontal" type="column">
-          {(provided) => (
-            <div 
-              ref={provided.innerRef}
-              {...provided.droppableProps}
-              style={{ display: 'flex', gap: '24px', flex: 1, overflowX: 'auto', paddingBottom: '16px' }}
-            >
-              
-              {columns.map((col, index) => {
-                const colColor = getColumnColor(col.name);
-                const isDoneCol = colColor === '#10b981';
+      <>
+        {/* ── Thanh Bộ Lọc (Filter Engine) ── */}
+        <div style={{ display: 'flex', gap: '16px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
+           <input 
+             value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+             placeholder="🔍 Tìm theo từ khóa..."
+             style={{ background: 'rgba(255,255,255,0.05)', border: `1px solid ${C.border}`, borderRadius: '6px', color: C.text, padding: '8px 12px', fontSize: '13px', outline: 'none', width: '220px' }}
+           />
+           
+           <select 
+             value={filterMemberId || ''} onChange={(e) => setFilterMemberId(e.target.value || null)}
+             style={{ background: 'rgba(255,255,255,0.05)', border: `1px solid ${C.border}`, borderRadius: '6px', color: C.text, padding: '8px 12px', fontSize: '13px', outline: 'none', cursor: 'pointer' }}
+           >
+             <option value="" style={{ background: C.bg, color: C.text }}>👤 Mọi thành viên</option>
+             <option value="unassigned" style={{ background: C.bg, color: C.text }}>❓ Chưa gán (Unassigned)</option>
+             {members.map(m => (
+               <option key={m.userId} value={m.userId} style={{ background: C.bg, color: C.text }}>{m.fullName}</option>
+             ))}
+           </select>
 
-                return (
-                  <Draggable key={col.id} draggableId={col.id} index={index}>
+           <select 
+             value={filterLabel || ''} onChange={(e) => setFilterLabel(e.target.value || null)}
+             style={{ background: 'rgba(255,255,255,0.05)', border: `1px solid ${C.border}`, borderRadius: '6px', color: C.text, padding: '8px 12px', fontSize: '13px', outline: 'none', cursor: 'pointer' }}
+           >
+             <option value="" style={{ background: C.bg, color: C.text }}>🏷️ Tất cả nhãn dán</option>
+             <option value="Khẩn cấp" style={{ background: C.bg, color: C.text }}>🔴 Khẩn cấp</option>
+             <option value="Tính năng" style={{ background: C.bg, color: C.text }}>🔵 Tính năng</option>
+             <option value="Bug" style={{ background: C.bg, color: C.text }}>🟠 Bug</option>
+             <option value="Nghiên cứu" style={{ background: C.bg, color: C.text }}>🟣 Nghiên cứu</option>
+           </select>
+
+           {isFiltering && (
+              <div style={{ color: C.accent, fontSize: '12px', fontWeight: 600, background: 'rgba(79,110,242,0.1)', padding: '6px 12px', borderRadius: '16px' }}>
+                Đang hiển thị {totalFilteredTasks} thẻ khớp.
+                <button onClick={() => {setSearchQuery(''); setFilterMemberId(null); setFilterLabel(null);}} style={{ background: 'none', border: 'none', color: '#ef4444', marginLeft: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Xóa lọc</button>
+              </div>
+           )}
+        </div>
+
+        <DragDropContext onDragEnd={onDragEnd}>
+          <Droppable droppableId="all-columns" direction="horizontal" type="column">
+            {(provided) => (
+              <div 
+                ref={provided.innerRef}
+                {...provided.droppableProps}
+                style={{ display: 'flex', gap: '24px', flex: 1, overflowX: 'auto', paddingBottom: '16px' }}
+              >
+                
+                {filteredColumns.map((col, index) => {
+                  const colColor = getColumnColor(col.name);
+                  const isDoneCol = colColor === '#10b981';
+  
+                  return (
+                    <Draggable key={col.id} draggableId={col.id} index={index}>
                   {(providedCol, snapshotCol) => (
                     <div 
                       ref={providedCol.innerRef}
@@ -399,6 +494,20 @@ const BoardPage = () => {
                                               </div>
                                             ) : <div/>}
 
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                              {task.attachments && task.attachments.length > 0 && (
+                                                <div style={{ fontSize: '11px', color: C.textMuted, display: 'flex', alignItems: 'center', gap: '3px' }} title={`${task.attachments.length} tệp đính kèm`}>
+                                                  📎 {task.attachments.length}
+                                                </div>
+                                              )}
+                                              
+                                              {task.comments && task.comments.length > 0 && (
+                                                <div style={{ fontSize: '11px', color: C.textMuted, display: 'flex', alignItems: 'center', gap: '3px' }} title={`${task.comments.length} bình luận`}>
+                                                  💬 {task.comments.length}
+                                                </div>
+                                              )}
+                                            </div>
+
                                             {task.assignees && task.assignees.length > 0 && (
                                               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                                                 {task.assignees.map(a => (
@@ -454,37 +563,38 @@ const BoardPage = () => {
                       </div>
                     </div>
                   )}
-                  </Draggable>
-                );
-              })}
-              
-              {/* Nút Tạo Cột Mới Nhỏ Gọn */}
-              <div style={{ flex: '0 0 auto' }}>
-                {addingCol ? (
-                  <div style={{ width: '240px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', padding: '12px', border: `1px dashed ${C.border}` }}>
-                    <input autoFocus value={newColName} onChange={e => setNewColName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddCol()} placeholder="Nhập tên cột..." style={{ width: '100%', marginBottom: '8px', padding: '8px 12px', borderRadius: '6px', border: `1px solid ${C.border}`, background: 'rgba(0,0,0,0.2)', color: C.text, outline: 'none', fontSize: '13px' }} />
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button onClick={handleAddCol} style={{ flex: 1, padding: '6px', background: C.accent, color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}>Lưu</button>
-                      <button onClick={() => { setAddingCol(false); setNewColName(''); }} style={{ flex: 1, padding: '6px', background: 'transparent', color: C.textMuted, border: `1px solid ${C.border}`, borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}>Hủy</button>
+                    </Draggable>
+                  );
+                })}
+                
+                {/* Nút Tạo Cột Mới Nhỏ Gọn */}
+                <div style={{ flex: '0 0 auto' }}>
+                  {addingCol ? (
+                    <div style={{ width: '240px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', padding: '12px', border: `1px dashed ${C.border}` }}>
+                      <input autoFocus value={newColName} onChange={e => setNewColName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddCol()} placeholder="Nhập tên cột..." style={{ width: '100%', marginBottom: '8px', padding: '8px 12px', borderRadius: '6px', border: `1px solid ${C.border}`, background: 'rgba(0,0,0,0.2)', color: C.text, outline: 'none', fontSize: '13px' }} />
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button onClick={handleAddCol} style={{ flex: 1, padding: '6px', background: C.accent, color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}>Lưu</button>
+                        <button onClick={() => { setAddingCol(false); setNewColName(''); }} style={{ flex: 1, padding: '6px', background: 'transparent', color: C.textMuted, border: `1px solid ${C.border}`, borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}>Hủy</button>
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <button 
-                    onClick={() => setAddingCol(true)} 
-                    title="Tạo cột mới"
-                    style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', border: `1px dashed ${C.border}`, color: C.textMuted, cursor: 'pointer', fontSize: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', marginTop: '4px' }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = C.accent; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = C.accent; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = C.textMuted; e.currentTarget.style.borderColor = C.border; }}
-                  >
-                    +
-                  </button>
-                )}
-              </div>
+                  ) : (
+                    <button 
+                      onClick={() => setAddingCol(true)} 
+                      title="Tạo cột mới"
+                      style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', border: `1px dashed ${C.border}`, color: C.textMuted, cursor: 'pointer', fontSize: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', marginTop: '4px' }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = C.accent; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = C.accent; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = C.textMuted; e.currentTarget.style.borderColor = C.border; }}
+                    >
+                      +
+                    </button>
+                  )}
+                </div>
 
-            </div>
-          )}
-        </Droppable>
-      </DragDropContext>
+              </div>
+            )}
+          </Droppable>
+        </DragDropContext>
+      </>
       )}
 
       {/* ── Task Modal Layer ── */}

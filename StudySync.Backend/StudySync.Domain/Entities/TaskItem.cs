@@ -19,4 +19,5 @@ public class TaskItem : BaseEntity
     public Column Column { get; set; } = null!;
     public ICollection<TaskAssignee> Assignees { get; set; } = new List<TaskAssignee>();
     public ICollection<TaskComment> Comments { get; set; } = new List<TaskComment>();
+    public ICollection<TaskAttachment> Attachments { get; set; } = new List<TaskAttachment>();
 }

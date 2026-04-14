@@ -17,4 +17,8 @@ public interface ITaskService
 
     // Comment Flow
     Task<TaskCommentResponse> AddCommentAsync(Guid taskId, CreateCommentRequest request, Guid requestingUserId);
+
+    // Attachment Flow
+    Task<TaskAttachmentResponse> AddAttachmentAsync(Guid taskId, Microsoft.AspNetCore.Http.IFormFile file, Guid requestingUserId);
+    Task DeleteAttachmentAsync(Guid taskId, Guid attachmentId, Guid requestingUserId);
 }

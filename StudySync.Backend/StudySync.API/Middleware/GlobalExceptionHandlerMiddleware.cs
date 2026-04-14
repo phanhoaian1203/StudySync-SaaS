@@ -43,9 +43,11 @@ public class GlobalExceptionHandlerMiddleware
             NotFoundException    => (HttpStatusCode.NotFound, exception.Message),           // 404
             UnauthorizedException => (HttpStatusCode.Unauthorized, exception.Message),      // 401
             ForbiddenException   => (HttpStatusCode.Forbidden, exception.Message),         // 403
+            BadRequestException  => (HttpStatusCode.BadRequest, exception.Message),        // 400
+            InvalidOperationException => (HttpStatusCode.BadRequest, exception.Message),    // 400 - Thường là do thiếu Config
             ArgumentException    => (HttpStatusCode.BadRequest, exception.Message),         // 400
             _                    => (HttpStatusCode.InternalServerError,                    // 500
-                                     "Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau.")
+                                     exception.Message ?? "Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau.")
         };
 
         context.Response.ContentType = "application/json";

@@ -64,6 +64,16 @@ public class ColumnService : IColumnService
                         FullName = c.User.FullName,
                         Email = c.User.Email
                     }
+                }).ToList(),
+                Attachments = t.Attachments.Select(a => new TaskAttachmentResponse
+                {
+                    Id = a.Id,
+                    FileName = a.FileName,
+                    FileUrl = a.FileUrl,
+                    PublicId = a.PublicId,
+                    FileSize = a.FileSize,
+                    FileType = a.FileType,
+                    CreatedAt = a.CreatedAt
                 }).ToList()
             }).ToList()
         });

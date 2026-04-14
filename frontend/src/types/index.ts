@@ -112,6 +112,17 @@ export interface TaskResponse {
   createdAt: string;
   assignees?: UserDto[];
   comments?: TaskCommentResponse[];
+  attachments?: TaskAttachmentResponse[];
+}
+
+export interface TaskAttachmentResponse {
+  id: string;
+  fileName: string;
+  fileUrl: string;
+  publicId: string;
+  fileSize: number;
+  fileType: string;
+  createdAt: string;
 }
 
 export interface TaskCommentResponse {

@@ -24,12 +24,16 @@ public class ColumnRepository : IColumnRepository
     public async Task<IEnumerable<Column>> GetColumnsByBoardIdAsync(Guid boardId)
     {
         return await _context.Columns
+            .AsNoTracking()
+            .AsSplitQuery()
             .Include(c => c.Tasks.Where(t => !t.IsDeleted).OrderBy(t => t.OrderIndex))
                 .ThenInclude(t => t.Assignees)
                     .ThenInclude(a => a.User)
             .Include(c => c.Tasks.Where(t => !t.IsDeleted).OrderBy(t => t.OrderIndex))
                 .ThenInclude(t => t.Comments)
                     .ThenInclude(cmt => cmt.User)
+            .Include(c => c.Tasks.Where(t => !t.IsDeleted).OrderBy(t => t.OrderIndex))
+                .ThenInclude(t => t.Attachments)
             .Where(c => c.BoardId == boardId && !c.IsDeleted)
             .OrderBy(c => c.OrderIndex)
             .ToListAsync();

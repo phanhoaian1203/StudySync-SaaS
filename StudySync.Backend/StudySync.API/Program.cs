@@ -5,6 +5,9 @@ using Microsoft.OpenApi.Models;
 using StudySync.API.Middleware;
 using StudySync.Infrastructure;
 using StudySync.Infrastructure.Persistence;
+using StudySync.Infrastructure.Services;
+using StudySync.Application.Helpers;
+using StudySync.Application.Interfaces.Services;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -13,6 +16,11 @@ var builder = WebApplication.CreateBuilder(args);
 // 1. INFRASTRUCTURE SERVICES (DbContext, Repositories, Services...)
 // ════════════════════════════════════════════════════════════════════
 builder.Services.AddInfrastructureServices(builder.Configuration);
+
+// Cloudinary Configuration
+builder.Services.Configure<CloudinarySettings>(builder.Configuration.GetSection("CloudinarySettings"));
+builder.Services.AddScoped<IPhotoService, PhotoService>();
+
 
 // ════════════════════════════════════════════════════════════════════
 // 2. JWT AUTHENTICATION

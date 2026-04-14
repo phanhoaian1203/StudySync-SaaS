@@ -36,6 +36,7 @@ public class WorkspaceService : IWorkspaceService
     {
         // Lấy workspace do user sở hữu + workspace user là thành viên
         var workspaces = await _context.Workspaces
+            .AsNoTracking()
             .Where(w => !w.IsDeleted && (
                 w.OwnerId == userId ||
                 w.Members.Any(m => m.UserId == userId)
@@ -60,6 +61,7 @@ public class WorkspaceService : IWorkspaceService
     public async Task<WorkspaceResponse> GetByIdAsync(Guid workspaceId, Guid requestingUserId)
     {
         var workspace = await _context.Workspaces
+            .AsNoTracking()
             .Where(w => w.Id == workspaceId && !w.IsDeleted)
             .Select(w => new WorkspaceResponse
             {

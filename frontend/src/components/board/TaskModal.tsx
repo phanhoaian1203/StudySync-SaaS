@@ -37,9 +37,11 @@ export default function TaskModal({ task, members, onClose, onUpdateTask }: Task
   const [dueDate, setDueDate] = useState<string>(task.dueDate ? new Date(task.dueDate).toISOString().slice(0, 16) : '');
   const [labels, setLabels] = useState<any[]>(task.labels ? JSON.parse(task.labels) : []);
   const [comments, setComments] = useState<any[]>(task.comments || []);
+  const [attachments, setAttachments] = useState<any[]>(task.attachments || []);
   const [commentText, setCommentText] = useState('');
   const [isEditingMode, setIsEditingMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [showAssignDrop, setShowAssignDrop] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -49,6 +51,7 @@ export default function TaskModal({ task, members, onClose, onUpdateTask }: Task
     setDueDate(task.dueDate ? new Date(task.dueDate).toISOString().slice(0, 16) : '');
     setLabels(task.labels ? JSON.parse(task.labels) : []);
     setComments(task.comments || []);
+    setAttachments(task.attachments || []);
   }, [task]);
 
   const handlePostComment = async () => {
@@ -109,6 +112,36 @@ export default function TaskModal({ task, members, onClose, onUpdateTask }: Task
     } catch (e) {
       console.error(e);
       alert("Lỗi khi gán thành viên!");
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const response = await taskService.uploadAttachment(task.id, file);
+      const newAttachments = [response, ...attachments];
+      setAttachments(newAttachments);
+      onUpdateTask({ ...task, attachments: newAttachments });
+    } catch (err) {
+      console.error(err);
+      alert("Lỗi khi tải tệp lên!");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleDeleteAttachment = async (attachmentId: string) => {
+    try {
+      await taskService.deleteAttachment(task.id, attachmentId);
+      const newAttachments = attachments.filter(a => a.id !== attachmentId);
+      setAttachments(newAttachments);
+      onUpdateTask({ ...task, attachments: newAttachments });
+    } catch (err) {
+      console.error(err);
+      alert("Lỗi khi xóa tệp đính kèm!");
     }
   };
 
@@ -214,6 +247,53 @@ export default function TaskModal({ task, members, onClose, onUpdateTask }: Task
                   />
                 </div>
               )}
+            </div>
+
+            {/* ATTACHMENTS SECTION */}
+            <div style={{ marginTop: '32px' }}>
+               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                  <h4 style={{ fontSize: '13px', fontWeight: 600, color: C.text, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>Đính kèm</span>
+                  </h4>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', background: C.hover, padding: '4px 12px', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', border: `1px solid ${C.border}` }}>
+                    <input type="file" hidden onChange={handleFileChange} disabled={isUploading} />
+                    {isUploading ? 'Đang tải...' : 'Thêm đính kèm'}
+                  </label>
+               </div>
+
+               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+                  {attachments.map(att => {
+                    const isImage = att.fileType?.startsWith('image/');
+                    return (
+                      <div key={att.id} style={{ display: 'flex', gap: '12px', background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}`, borderRadius: '8px', padding: '12px', position: 'relative' }}>
+                        <div style={{ width: '80px', height: '60px', borderRadius: '4px', background: '#334155', flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          {isImage ? (
+                            <img src={att.fileUrl} alt={att.fileName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : (
+                            <span style={{ fontSize: '20px' }}>📄</span>
+                          )}
+                        </div>
+                        <div style={{ flex: 1, overflow: 'hidden' }}>
+                          <div style={{ fontSize: '14px', color: C.text, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {att.fileName}
+                          </div>
+                          <div style={{ fontSize: '12px', color: C.textMuted, marginTop: '4px' }}>
+                            {Math.round(att.fileSize / 1024)} KB • {new Date(att.createdAt).toLocaleDateString()}
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                            <a href={att.fileUrl} target="_blank" rel="noreferrer" style={{ fontSize: '12px', color: C.accent, textDecoration: 'none' }}>Mở file</a>
+                            <span onClick={() => handleDeleteAttachment(att.id)} style={{ fontSize: '12px', color: '#ef4444', cursor: 'pointer' }}>Xóa</span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+               </div>
+               {attachments.length === 0 && !isUploading && (
+                 <div style={{ padding: '24px', border: `1px dashed ${C.border}`, borderRadius: '8px', textAlign: 'center', color: C.textMuted, fontSize: '13px' }}>
+                    Chưa có tài liệu nào được đính kèm.
+                 </div>
+               )}
             </div>
             
             {/* COMMENTS ACTIVITY SECTION */}

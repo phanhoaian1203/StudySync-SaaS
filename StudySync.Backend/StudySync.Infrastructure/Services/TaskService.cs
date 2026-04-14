@@ -13,18 +13,21 @@ public class TaskService : ITaskService
     private readonly IColumnRepository _columnRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IUserRepository _userRepository;
+    private readonly IPhotoService _photoService;
     private readonly StudySync.Infrastructure.Persistence.ApplicationDbContext _context;
 
     public TaskService(
         ITaskRepository taskRepository,
         IColumnRepository columnRepository,
         IUserRepository userRepository,
+        IPhotoService photoService,
         StudySync.Infrastructure.Persistence.ApplicationDbContext context,
         IUnitOfWork unitOfWork)
     {
         _taskRepository = taskRepository;
         _columnRepository = columnRepository;
         _userRepository = userRepository;
+        _photoService = photoService;
         _context = context;
         _unitOfWork = unitOfWork;
     }
@@ -35,10 +38,12 @@ public class TaskService : ITaskService
 
         // Lấy danh sách task kèm Assignees và Comments
         var tasks = await _context.TaskItems
+            .AsNoTracking()
             .Include(t => t.Assignees)
                 .ThenInclude(a => a.User)
             .Include(t => t.Comments)
                 .ThenInclude(c => c.User)
+            .Include(t => t.Attachments)
             .Where(t => t.ColumnId == columnId && !t.IsDeleted)
             .OrderBy(t => t.OrderIndex)
             .ToListAsync();
@@ -71,6 +76,16 @@ public class TaskService : ITaskService
                     FullName = c.User.FullName,
                     Email = c.User.Email
                 }
+            }).ToList(),
+            Attachments = t.Attachments.OrderByDescending(a => a.CreatedAt).Select(a => new TaskAttachmentResponse
+            {
+                Id = a.Id,
+                FileName = a.FileName,
+                FileUrl = a.FileUrl,
+                PublicId = a.PublicId,
+                FileSize = a.FileSize,
+                FileType = a.FileType,
+                CreatedAt = a.CreatedAt
             }).ToList()
         });
     }
@@ -221,14 +236,80 @@ public class TaskService : ITaskService
         };
     }
 
+    // Attachment Logic
+    public async Task<TaskAttachmentResponse> AddAttachmentAsync(Guid taskId, Microsoft.AspNetCore.Http.IFormFile file, Guid requestingUserId)
+    {
+        if (file == null || file.Length == 0)
+            throw new BadRequestException("File không hợp lệ hoặc trống.");
+
+        var task = await _taskRepository.GetByIdAsync(taskId)
+             ?? throw new NotFoundException("Task", taskId);
+
+        var uploadResult = await _photoService.AddPhotoAsync(file);
+
+        if (uploadResult.Error != null)
+        {
+            throw new BadRequestException("Lỗi Cloudinary: " + uploadResult.Error.Message);
+        }
+
+        if (uploadResult.SecureUrl == null)
+        {
+            throw new Exception("Không nhận được URL bảo mật từ Cloudinary sau khi upload.");
+        }
+
+        var attachment = new TaskAttachment
+        {
+            TaskId = taskId,
+            FileName = file.FileName,
+            FileUrl = uploadResult.SecureUrl.ToString(),
+            PublicId = uploadResult.PublicId,
+            FileSize = file.Length,
+            FileType = file.ContentType
+        };
+
+        await _context.TaskAttachments.AddAsync(attachment);
+        await _unitOfWork.SaveChangesAsync();
+
+        return new TaskAttachmentResponse
+        {
+            Id = attachment.Id,
+            FileName = attachment.FileName,
+            FileUrl = attachment.FileUrl,
+            PublicId = attachment.PublicId,
+            FileSize = attachment.FileSize,
+            FileType = attachment.FileType,
+            CreatedAt = attachment.CreatedAt
+        };
+    }
+
+    public async Task DeleteAttachmentAsync(Guid taskId, Guid attachmentId, Guid requestingUserId)
+    {
+        var attachment = await _context.TaskAttachments.FindAsync(attachmentId)
+             ?? throw new NotFoundException("Attachment", attachmentId);
+
+        if (attachment.TaskId != taskId)
+            throw new BadRequestException("Đính kèm này không thuộc về công việc được yêu cầu.");
+
+        // Xóa trên Cloudinary
+        var deleteResult = await _photoService.DeletePhotoAsync(attachment.PublicId);
+
+        if (deleteResult.Error != null)
+            throw new Exception("Lỗi khi xóa file trên Cloudinary: " + deleteResult.Error.Message);
+
+        _context.TaskAttachments.Remove(attachment);
+        await _unitOfWork.SaveChangesAsync();
+    }
+
     // Helper map Data full Assignees
     private async Task<TaskResponse> GetTaskResponseMappedById(Guid taskId)
     {
         var t = await _context.TaskItems
+            .AsNoTracking()
             .Include(x => x.Assignees)
                 .ThenInclude(a => a.User)
             .Include(x => x.Comments)
                 .ThenInclude(c => c.User)
+            .Include(x => x.Attachments)
             .FirstOrDefaultAsync(x => x.Id == taskId);
 
         return new TaskResponse
@@ -259,6 +340,16 @@ public class TaskService : ITaskService
                     FullName = c.User.FullName,
                     Email = c.User.Email
                 }
+            }).ToList(),
+            Attachments = t.Attachments.OrderByDescending(a => a.CreatedAt).Select(a => new TaskAttachmentResponse
+            {
+                Id = a.Id,
+                FileName = a.FileName,
+                FileUrl = a.FileUrl,
+                PublicId = a.PublicId,
+                FileSize = a.FileSize,
+                FileType = a.FileType,
+                CreatedAt = a.CreatedAt
             }).ToList()
         };
     }

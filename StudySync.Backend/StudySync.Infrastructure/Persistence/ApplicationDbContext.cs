@@ -17,6 +17,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<TaskItem> TaskItems { get; set; }
     public DbSet<TaskAssignee> TaskAssignees { get; set; }
     public DbSet<TaskComment> TaskComments { get; set; }
+    public DbSet<TaskAttachment> TaskAttachments { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -28,7 +29,30 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<TaskComment>()
             .HasOne(c => c.User)
             .WithMany()
-            .HasForeignKey(c => c.UserId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // Xóa Task thì xóa luôn Attachments
+        modelBuilder.Entity<TaskAttachment>()
+            .HasOne(a => a.Task)
+            .WithMany(t => t.Attachments)
+            .HasForeignKey(a => a.TaskId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // ════════════════════════════════════════════════════════════════════
+        // PERFORMANCE OPTIMIZATION: Bổ sung Index cho các khóa ngoại thường dùng
+        // ════════════════════════════════════════════════════════════════════
+        
+        modelBuilder.Entity<Workspace>().HasIndex(w => w.OwnerId);
+        modelBuilder.Entity<Board>().HasIndex(b => b.WorkspaceId);
+        modelBuilder.Entity<Column>().HasIndex(c => c.BoardId);
+        
+        modelBuilder.Entity<TaskItem>()
+            .HasIndex(t => t.ColumnId);
+        
+        modelBuilder.Entity<TaskComment>()
+            .HasIndex(c => c.TaskItemId);
+            
+        modelBuilder.Entity<TaskAttachment>()
+            .HasIndex(a => a.TaskId);
     }
 }

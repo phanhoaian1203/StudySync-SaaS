@@ -74,6 +74,22 @@ public class TasksController : ControllerBase
         return Ok(comment);
     }
 
+    [HttpPost("{id:guid}/attachments")]
+    public async Task<IActionResult> UploadAttachment(Guid id, IFormFile file)
+    {
+        var userId = GetUserId();
+        var attachment = await _taskService.AddAttachmentAsync(id, file, userId);
+        return Ok(attachment);
+    }
+
+    [HttpDelete("{id:guid}/attachments/{attachmentId:guid}")]
+    public async Task<IActionResult> DeleteAttachment(Guid id, Guid attachmentId)
+    {
+        var userId = GetUserId();
+        await _taskService.DeleteAttachmentAsync(id, attachmentId, userId);
+        return NoContent();
+    }
+
     private Guid GetUserId()
     {
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
