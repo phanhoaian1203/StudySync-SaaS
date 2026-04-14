@@ -3,6 +3,12 @@ import type { TaskResponse, CreateTaskRequest } from '../types';
 
 export const taskService = {
   /**
+   * Lấy thông tin chi tiết Task (kèm Assignees, Comments, Checklists, Activity Logs)
+   */
+  getById: (taskId: string): Promise<TaskResponse> =>
+    axiosClient.get(`/tasks/${taskId}`),
+
+  /**
    * Tạo Task mới trong 1 Column
    */
   create: (data: CreateTaskRequest): Promise<TaskResponse> =>
@@ -59,5 +65,20 @@ export const taskService = {
    * Xóa đính kèm
    */
   deleteAttachment: (taskId: string, attachmentId: string): Promise<void> =>
-    axiosClient.delete(`/tasks/${taskId}/attachments/${attachmentId}`)
+    axiosClient.delete(`/tasks/${taskId}/attachments/${attachmentId}`),
+
+  /**
+   * Quản lý Checklist
+   */
+  addChecklist: (taskId: string, content: string): Promise<any> =>
+    axiosClient.post(`/tasks/${taskId}/checklists`, { content }),
+
+  toggleChecklist: (taskId: string, checklistId: string): Promise<any> =>
+    axiosClient.patch(`/tasks/${taskId}/checklists/${checklistId}/toggle`),
+
+  updateChecklist: (taskId: string, checklistId: string, content: string): Promise<any> =>
+    axiosClient.put(`/tasks/${taskId}/checklists/${checklistId}`, { content }),
+
+  deleteChecklist: (taskId: string, checklistId: string): Promise<void> =>
+    axiosClient.delete(`/tasks/${taskId}/checklists/${checklistId}`)
 };

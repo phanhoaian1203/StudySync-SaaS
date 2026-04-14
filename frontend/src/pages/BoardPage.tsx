@@ -7,6 +7,7 @@ import { boardService } from '../services/boardService';
 import { columnService } from '../services/columnService';
 import { taskService } from '../services/taskService';
 import { workspaceService } from '../services/workspaceService';
+import { signalRService } from '../services/signalRService';
 import TaskModal from '../components/board/TaskModal';
 import type { BoardResponse, ColumnResponse, TaskResponse, WorkspaceMemberResponse } from '../types';
 
@@ -83,6 +84,51 @@ const BoardPage = () => {
         setColumns(sortedCols);
       })
       .catch(e => console.error(e));
+
+    // KẾT NỐI REAL-TIME (SIGNALR)
+    signalRService.startConnection(boardId)
+      .then(() => {
+        signalRService.onUpdate((action, data) => {
+          console.log("Real-time Update Received:", action, data);
+          
+          // Các hành động yêu cầu nạp lại toàn bộ danh sách cột để đồng bộ
+          const refreshActions = [
+            'TaskMoved', 'TaskUpdated', 'TaskCreated', 
+            'CommentAdded', 'AttachmentAdded', 'AttachmentDeleted',
+            'ChecklistAdded', 'ChecklistToggled', 'ChecklistDeleted', 'ChecklistUpdated'
+          ];
+
+          if (refreshActions.includes(action)) {
+             columnService.getColumnsByBoardId(boardId).then(cData => {
+                const sortedCols = cData.map(col => ({
+                  ...col,
+                  tasks: col.tasks.sort((a, b) => a.orderIndex - b.orderIndex)
+                })).sort((a, b) => a.orderIndex - b.orderIndex);
+                setColumns(sortedCols);
+             });
+
+             // Nếu đang mở Task Modal của thẻ vừa cập nhật, cần load lại chi tiết thẻ đó
+             if (selectedTask && (data.id === selectedTask.id || (data.taskId && data.taskId === selectedTask.id))) {
+               taskService.getById(selectedTask.id).then(res => {
+                 setSelectedTask(res);
+               });
+             }
+          }
+          
+          if (action === 'TaskDeleted') {
+             const deletedId = data.taskId || data.id;
+             setColumns(prev => prev.map(c => ({
+               ...c,
+               tasks: c.tasks.filter(t => t.id !== deletedId)
+             })));
+             if (selectedTask?.id === deletedId) setSelectedTask(null);
+          }
+        });
+      });
+
+    return () => {
+      signalRService.stopConnection();
+    };
   }, [boardId]);
 
   // 2. Logic Kéo Thả (Drag & Drop)

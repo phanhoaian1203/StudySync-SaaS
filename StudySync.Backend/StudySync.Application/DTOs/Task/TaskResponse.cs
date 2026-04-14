@@ -14,4 +14,6 @@ public class TaskResponse
     public List<StudySync.Application.DTOs.User.UserDto> Assignees { get; set; } = new();
     public List<TaskCommentResponse> Comments { get; set; } = new();
     public List<TaskAttachmentResponse> Attachments { get; set; } = new();
+    public List<ActivityLogResponse> ActivityLogs { get; set; } = new();
+    public List<TaskChecklistResponse> Checklists { get; set; } = new();
 }

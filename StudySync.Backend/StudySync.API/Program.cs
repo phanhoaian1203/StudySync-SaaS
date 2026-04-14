@@ -20,6 +20,7 @@ builder.Services.AddInfrastructureServices(builder.Configuration);
 // Cloudinary Configuration
 builder.Services.Configure<CloudinarySettings>(builder.Configuration.GetSection("CloudinarySettings"));
 builder.Services.AddScoped<IPhotoService, PhotoService>();
+builder.Services.AddSignalR();
 
 
 // ════════════════════════════════════════════════════════════════════
@@ -48,6 +49,21 @@ builder.Services.AddAuthentication(options =>
         ValidAudience            = jwtSettings["Audience"],
         IssuerSigningKey         = new SymmetricSecurityKey(key),
         ClockSkew                = TimeSpan.Zero // Loại bỏ thời gian trễ mặc định 5 phút
+    };
+
+    // Chuẩn SignalR: Đọc token từ Query String ("access_token") vì WebSockets không gửi Headers
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+            {
+                context.Token = accessToken;
+            }
+            return Task.CompletedTask;
+        }
     };
 });
 
@@ -164,5 +180,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<StudySync.Infrastructure.Hubs.BoardHub>("/hubs/board");
 
 app.Run();

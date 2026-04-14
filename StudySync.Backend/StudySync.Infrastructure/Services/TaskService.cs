@@ -3,6 +3,7 @@ using StudySync.Application.Interfaces.Repositories;
 using StudySync.Application.Interfaces.Services;
 using StudySync.Domain.Entities;
 using StudySync.Domain.Exceptions;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
 namespace StudySync.Infrastructure.Services;
@@ -15,6 +16,7 @@ public class TaskService : ITaskService
     private readonly IUserRepository _userRepository;
     private readonly IPhotoService _photoService;
     private readonly StudySync.Infrastructure.Persistence.ApplicationDbContext _context;
+    private readonly Microsoft.AspNetCore.SignalR.IHubContext<StudySync.Infrastructure.Hubs.BoardHub> _hubContext;
 
     public TaskService(
         ITaskRepository taskRepository,
@@ -22,7 +24,8 @@ public class TaskService : ITaskService
         IUserRepository userRepository,
         IPhotoService photoService,
         StudySync.Infrastructure.Persistence.ApplicationDbContext context,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        Microsoft.AspNetCore.SignalR.IHubContext<StudySync.Infrastructure.Hubs.BoardHub> hubContext)
     {
         _taskRepository = taskRepository;
         _columnRepository = columnRepository;
@@ -30,6 +33,7 @@ public class TaskService : ITaskService
         _photoService = photoService;
         _context = context;
         _unitOfWork = unitOfWork;
+        _hubContext = hubContext;
     }
 
     public async Task<IEnumerable<TaskResponse>> GetTasksByColumnIdAsync(Guid columnId, Guid requestingUserId)
@@ -90,6 +94,14 @@ public class TaskService : ITaskService
         });
     }
 
+    public async Task<TaskResponse> GetByIdAsync(Guid taskId, Guid requestingUserId)
+    {
+        var task = await _taskRepository.GetByIdAsync(taskId)
+            ?? throw new NotFoundException("Task", taskId);
+            
+        return await GetTaskResponseMappedById(taskId);
+    }
+
     // ───────────────────────────────────────────────────────────────────
     public async Task<TaskResponse> CreateAsync(CreateTaskRequest request, Guid requestingUserId)
     {
@@ -108,7 +120,13 @@ public class TaskService : ITaskService
         await _taskRepository.AddAsync(newTask);
         await _unitOfWork.SaveChangesAsync();
 
-        return await GetTaskResponseMappedById(newTask.Id);
+        // LOGGING
+        var col = await _columnRepository.GetByIdAsync(request.ColumnId);
+        await LogActivityAsync(col!.BoardId, newTask.Id, requestingUserId, StudySync.Domain.Enums.ActivityType.TaskCreated, $"Đã tạo thẻ mới: \"{newTask.Title}\"");
+
+        var response = await GetTaskResponseMappedById(newTask.Id);
+        await BroadcastUpdate(col.BoardId, "TaskCreated", response);
+        return response;
     }
 
     // ───────────────────────────────────────────────────────────────────
@@ -117,8 +135,12 @@ public class TaskService : ITaskService
         var task = await _taskRepository.GetByIdAsync(taskId)
             ?? throw new NotFoundException("Task", taskId);
 
+        var col = await _columnRepository.GetByIdAsync(task.ColumnId);
         _taskRepository.Delete(task);
         await _unitOfWork.SaveChangesAsync();
+
+        await LogActivityAsync(col!.BoardId, task.Id, requestingUserId, StudySync.Domain.Enums.ActivityType.TaskDeleted, $"Đã xóa thẻ: \"{task.Title}\"");
+        await BroadcastUpdate(col.BoardId, "TaskDeleted", new { TaskId = taskId });
     }
 
     // ───────────────────────────────────────────────────────────────────
@@ -134,7 +156,13 @@ public class TaskService : ITaskService
         _taskRepository.Update(task);
         await _unitOfWork.SaveChangesAsync();
 
-        return await GetTaskResponseMappedById(task.Id);
+        // LOGGING & REAL-TIME
+        var col = await _columnRepository.GetByIdAsync(task.ColumnId);
+        await LogActivityAsync(col!.BoardId, task.Id, requestingUserId, StudySync.Domain.Enums.ActivityType.TaskMoved, $"Đã chuyển thẻ \"{task.Title}\" sang cột {col.Name}");
+
+        var response = await GetTaskResponseMappedById(task.Id);
+        await BroadcastUpdate(col.BoardId, "TaskMoved", response);
+        return response;
     }
 
     public async Task<TaskResponse> UpdateDetailsAsync(Guid taskId, UpdateTaskDetailsRequest request, Guid requestingUserId)
@@ -142,24 +170,34 @@ public class TaskService : ITaskService
         var task = await _taskRepository.GetByIdAsync(taskId)
             ?? throw new NotFoundException("Task", taskId);
 
+        var oldTitle = task.Title;
         task.Title = request.Title.Trim();
         if (request.Description != null)
         {
             task.Description = request.Description.Trim();
         }
-        else
-        {
-            task.Description = null;
-        }
 
-        task.UpdatedById = requestingUserId;
         task.DueDate = request.DueDate;
         task.Labels = request.Labels;
+        task.UpdatedById = requestingUserId;
 
         _taskRepository.Update(task);
         await _unitOfWork.SaveChangesAsync();
 
-        return await GetTaskResponseMappedById(task.Id);
+        // LOGGING
+        var col = await _columnRepository.GetByIdAsync(task.ColumnId);
+        if (oldTitle != task.Title)
+        {
+            await LogActivityAsync(col!.BoardId, task.Id, requestingUserId, StudySync.Domain.Enums.ActivityType.TaskUpdated, $"Đã đổi tiêu đề thẻ: \"{oldTitle}\" -> \"{task.Title}\"");
+        }
+        else
+        {
+            await LogActivityAsync(col!.BoardId, task.Id, requestingUserId, StudySync.Domain.Enums.ActivityType.TaskUpdated, $"Đã cập nhật chi tiết thẻ \"{task.Title}\"");
+        }
+
+        var response = await GetTaskResponseMappedById(task.Id);
+        await BroadcastUpdate(col!.BoardId, "TaskUpdated", response);
+        return response;
     }
 
     public async Task<TaskResponse> AssignUserAsync(Guid taskId, AssignTaskRequest request, Guid requestingUserId)
@@ -180,7 +218,10 @@ public class TaskService : ITaskService
             await _unitOfWork.SaveChangesAsync();
         }
 
-        return await GetTaskResponseMappedById(taskId);
+        var col = await _columnRepository.GetByIdAsync(task.ColumnId);
+        var response = await GetTaskResponseMappedById(taskId);
+        await BroadcastUpdate(col!.BoardId, "TaskUpdated", response);
+        return response;
     }
 
     public async Task<TaskResponse> UnassignUserAsync(Guid taskId, Guid userIdToUnassign, Guid requestingUserId)
@@ -197,7 +238,10 @@ public class TaskService : ITaskService
             await _unitOfWork.SaveChangesAsync();
         }
 
-        return await GetTaskResponseMappedById(taskId);
+        var col = await _columnRepository.GetByIdAsync(task.ColumnId);
+        var response = await GetTaskResponseMappedById(taskId);
+        await BroadcastUpdate(col!.BoardId, "TaskUpdated", response);
+        return response;
     }
 
     // Nạp Comment mới
@@ -215,6 +259,11 @@ public class TaskService : ITaskService
 
         await _context.TaskComments.AddAsync(newComment);
         await _unitOfWork.SaveChangesAsync();
+
+        // Broadcast Real-time
+        var col = await _columnRepository.GetByIdAsync(task.ColumnId);
+        var taskRes = await GetTaskResponseMappedById(taskId);
+        await BroadcastUpdate(col!.BoardId, "CommentAdded", taskRes);
 
         // Trả về kèm thông tin người dùng
         var commentWithUser = await _context.TaskComments
@@ -270,6 +319,11 @@ public class TaskService : ITaskService
         await _context.TaskAttachments.AddAsync(attachment);
         await _unitOfWork.SaveChangesAsync();
 
+        // Broadcast Real-time
+        var col = await _columnRepository.GetByIdAsync(task.ColumnId);
+        var taskRes = await GetTaskResponseMappedById(taskId);
+        await BroadcastUpdate(col!.BoardId, "AttachmentAdded", taskRes);
+
         return new TaskAttachmentResponse
         {
             Id = attachment.Id,
@@ -284,6 +338,9 @@ public class TaskService : ITaskService
 
     public async Task DeleteAttachmentAsync(Guid taskId, Guid attachmentId, Guid requestingUserId)
     {
+        var task = await _taskRepository.GetByIdAsync(taskId)
+             ?? throw new NotFoundException("Task", taskId);
+
         var attachment = await _context.TaskAttachments.FindAsync(attachmentId)
              ?? throw new NotFoundException("Attachment", attachmentId);
 
@@ -298,6 +355,11 @@ public class TaskService : ITaskService
 
         _context.TaskAttachments.Remove(attachment);
         await _unitOfWork.SaveChangesAsync();
+
+        // Broadcast Real-time
+        var col = await _columnRepository.GetByIdAsync(task.ColumnId);
+        var taskRes = await GetTaskResponseMappedById(taskId);
+        await BroadcastUpdate(col!.BoardId, "AttachmentDeleted", taskRes);
     }
 
     // Helper map Data full Assignees
@@ -305,11 +367,15 @@ public class TaskService : ITaskService
     {
         var t = await _context.TaskItems
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(x => x.Assignees)
                 .ThenInclude(a => a.User)
             .Include(x => x.Comments)
                 .ThenInclude(c => c.User)
             .Include(x => x.Attachments)
+            .Include(x => x.Checklists)
+            .Include(x => x.ActivityLogs)
+                .ThenInclude(al => al.User)
             .FirstOrDefaultAsync(x => x.Id == taskId);
 
         return new TaskResponse
@@ -350,7 +416,49 @@ public class TaskService : ITaskService
                 FileSize = a.FileSize,
                 FileType = a.FileType,
                 CreatedAt = a.CreatedAt
+            }).ToList(),
+            Checklists = t.Checklists.OrderBy(c => c.OrderIndex).Select(c => new TaskChecklistResponse
+            {
+                Id = c.Id,
+                Content = c.Content,
+                IsCompleted = c.IsCompleted,
+                OrderIndex = c.OrderIndex
+            }).ToList(),
+            ActivityLogs = t.ActivityLogs.OrderByDescending(al => al.CreatedAt).Select(al => new ActivityLogResponse
+            {
+                Id = al.Id,
+                UserId = al.UserId,
+                UserFullName = al.User.FullName,
+                ActivityType = al.ActivityType.ToString(),
+                Content = al.Content,
+                OldValue = al.OldValue,
+                NewValue = al.NewValue,
+                CreatedAt = al.CreatedAt
             }).ToList()
         };
+    }
+
+    // ───────────────────────────────────────────────────────────────────
+    // HELPERS FOR PERFORMANCE & REAL-TIME
+    // ───────────────────────────────────────────────────────────────────
+    private async Task LogActivityAsync(Guid boardId, Guid taskId, Guid userId, StudySync.Domain.Enums.ActivityType type, string content, string? oldVal = null, string? newVal = null)
+    {
+        var log = new StudySync.Domain.Entities.ActivityLog
+        {
+            BoardId = boardId,
+            TaskItemId = taskId,
+            UserId = userId,
+            ActivityType = type,
+            Content = content,
+            OldValue = oldVal,
+            NewValue = newVal
+        };
+        await _context.ActivityLogs.AddAsync(log);
+        await _unitOfWork.SaveChangesAsync();
+    }
+
+    private async Task BroadcastUpdate(Guid boardId, string action, object data)
+    {
+        await _hubContext.Clients.Group(boardId.ToString()).SendAsync("ReceiveTaskUpdate", new { Action = action, Data = data });
     }
 }

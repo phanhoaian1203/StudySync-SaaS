@@ -18,6 +18,14 @@ public class TasksController : ControllerBase
         _taskService = taskService;
     }
 
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<TaskResponse>> GetById(Guid id)
+    {
+        var userId = GetUserId();
+        var task = await _taskService.GetByIdAsync(id, userId);
+        return Ok(task);
+    }
+
     [HttpPost]
     public async Task<ActionResult<TaskResponse>> Create(CreateTaskRequest request)
     {

@@ -60,7 +60,7 @@ function extractErrorMessage(error: AxiosError): string {
 // Axios Instance
 // ─────────────────────────────────────────────────────────────────
 const axiosClient = axios.create({
-  baseURL: 'https://localhost:7150/api',
+  baseURL: `${import.meta.env.VITE_API_URL}/api`,
   headers: {
     'Content-Type': 'application/json',
   },

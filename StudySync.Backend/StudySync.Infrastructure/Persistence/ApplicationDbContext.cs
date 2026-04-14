@@ -18,6 +18,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<TaskAssignee> TaskAssignees { get; set; }
     public DbSet<TaskComment> TaskComments { get; set; }
     public DbSet<TaskAttachment> TaskAttachments { get; set; }
+    public DbSet<ActivityLog> ActivityLogs { get; set; }
+    public DbSet<TaskChecklist> TaskChecklists { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -54,5 +56,41 @@ public class ApplicationDbContext : DbContext
             
         modelBuilder.Entity<TaskAttachment>()
             .HasIndex(a => a.TaskId);
+
+        // ════════════════════════════════════════════════════════════════════
+        // SPRINT 13: Activity Log & Task Checklist Configurations
+        // ════════════════════════════════════════════════════════════════════
+
+        modelBuilder.Entity<ActivityLog>()
+            .HasOne(al => al.Board)
+            .WithMany()
+            .HasForeignKey(al => al.BoardId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        modelBuilder.Entity<ActivityLog>()
+            .HasOne(al => al.User)
+            .WithMany()
+            .HasForeignKey(al => al.UserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<ActivityLog>()
+            .HasOne(al => al.TaskItem)
+            .WithMany(t => t.ActivityLogs)
+            .HasForeignKey(al => al.TaskItemId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        modelBuilder.Entity<ActivityLog>()
+            .HasIndex(al => al.BoardId);
+        modelBuilder.Entity<ActivityLog>()
+            .HasIndex(al => al.TaskItemId);
+
+        modelBuilder.Entity<TaskChecklist>()
+            .HasOne(tc => tc.TaskItem)
+            .WithMany(t => t.Checklists)
+            .HasForeignKey(tc => tc.TaskItemId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<TaskChecklist>()
+            .HasIndex(tc => tc.TaskItemId);
     }
 }

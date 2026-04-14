@@ -45,6 +45,7 @@ public static class DependencyInjection
         services.AddScoped<IBoardService, BoardService>();
         services.AddScoped<IColumnService, ColumnService>();
         services.AddScoped<ITaskService, TaskService>();
+        services.AddScoped<IChecklistService, ChecklistService>();
 
         return services;
     }

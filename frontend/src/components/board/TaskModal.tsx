@@ -38,7 +38,11 @@ export default function TaskModal({ task, members, onClose, onUpdateTask }: Task
   const [labels, setLabels] = useState<any[]>(task.labels ? JSON.parse(task.labels) : []);
   const [comments, setComments] = useState<any[]>(task.comments || []);
   const [attachments, setAttachments] = useState<any[]>(task.attachments || []);
+  const [checklists, setChecklists] = useState<any[]>(task.checklists || []);
+  const [activityLogs, setActivityLogs] = useState<any[]>(task.activityLogs || []);
+  
   const [commentText, setCommentText] = useState('');
+  const [newChecklistText, setNewChecklistText] = useState('');
   const [isEditingMode, setIsEditingMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -52,6 +56,8 @@ export default function TaskModal({ task, members, onClose, onUpdateTask }: Task
     setLabels(task.labels ? JSON.parse(task.labels) : []);
     setComments(task.comments || []);
     setAttachments(task.attachments || []);
+    setChecklists(task.checklists || []);
+    setActivityLogs(task.activityLogs || []);
   }, [task]);
 
   const handlePostComment = async () => {
@@ -144,6 +150,39 @@ export default function TaskModal({ task, members, onClose, onUpdateTask }: Task
       alert("Lỗi khi xóa tệp đính kèm!");
     }
   };
+
+  // CHECKLIST LOGIC
+  const handleAddChecklist = async () => {
+    if (!newChecklistText.trim()) return;
+    try {
+      const response = await taskService.addChecklist(task.id, newChecklistText);
+      const newChecklists = [...checklists, response];
+      setChecklists(newChecklists);
+      setNewChecklistText('');
+      onUpdateTask({ ...task, checklists: newChecklists });
+    } catch (e) { console.error(e); }
+  };
+
+  const handleToggleChecklist = async (id: string) => {
+    try {
+      const response = await taskService.toggleChecklist(task.id, id);
+      const newChecklists = checklists.map(c => c.id === id ? response : c);
+      setChecklists(newChecklists);
+      onUpdateTask({ ...task, checklists: newChecklists });
+    } catch (e) { console.error(e); }
+  };
+
+  const handleDeleteChecklist = async (id: string) => {
+    try {
+       await taskService.deleteChecklist(task.id, id);
+       const newChecklists = checklists.filter(c => c.id !== id);
+       setChecklists(newChecklists);
+       onUpdateTask({ ...task, checklists: newChecklists });
+    } catch (e) { console.error(e); }
+  };
+
+  const completedCount = checklists.filter(c => c.isCompleted).length;
+  const progressPercent = checklists.length > 0 ? Math.round((completedCount / checklists.length) * 100) : 0;
 
   return (
     <div 
@@ -249,6 +288,58 @@ export default function TaskModal({ task, members, onClose, onUpdateTask }: Task
               )}
             </div>
 
+            {/* CHECKLIST SECTION */}
+            <div style={{ marginTop: '32px' }}>
+               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                  <h4 style={{ fontSize: '13px', fontWeight: 600, color: C.text, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>Danh sách kiểm tra</span>
+                    <span style={{ fontSize: '11px', color: C.textMuted, fontWeight: 400 }}>{completedCount}/{checklists.length}</span>
+                  </h4>
+               </div>
+               
+               {/* Progress Bar */}
+               <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', marginBottom: '16px', overflow: 'hidden' }}>
+                  <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progressPercent}%` }}
+                    style={{ height: '100%', background: progressPercent === 100 ? '#10b981' : C.accent }}
+                  />
+               </div>
+
+               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {checklists.map(c => (
+                    <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                       <input 
+                         type="checkbox" 
+                         checked={c.isCompleted} 
+                         onChange={() => handleToggleChecklist(c.id)}
+                         style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: C.accent }}
+                       />
+                       <span style={{ flex: 1, fontSize: '14px', color: c.isCompleted ? C.textMuted : C.text, textDecoration: c.isCompleted ? 'line-through' : 'none' }}>
+                         {c.content}
+                       </span>
+                       <button 
+                         onClick={() => handleDeleteChecklist(c.id)}
+                         style={{ opacity: 0.5, border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', fontSize: '12px' }}
+                       >✕</button>
+                    </div>
+                  ))}
+               </div>
+
+               <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
+                  <input 
+                    value={newChecklistText}
+                    onChange={e => setNewChecklistText(e.target.value)}
+                    placeholder="Thêm mục mới..."
+                    onKeyDown={e => e.key === 'Enter' && handleAddChecklist()}
+                    style={{ flex: 1, background: C.inputBg, border: `1px solid ${C.border}`, borderRadius: '4px', padding: '6px 12px', color: C.text, fontSize: '13px', outline: 'none' }}
+                  />
+                  <button onClick={handleAddChecklist} style={{ background: 'rgba(255,255,255,0.05)', color: C.text, border: `1px solid ${C.border}`, padding: '4px 12px', fontSize: '12px', borderRadius: '4px', cursor: 'pointer' }}>
+                    Thêm
+                  </button>
+               </div>
+            </div>
+
             {/* ATTACHMENTS SECTION */}
             <div style={{ marginTop: '32px' }}>
                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
@@ -350,6 +441,30 @@ export default function TaskModal({ task, members, onClose, onUpdateTask }: Task
                 ))}
                 {comments.length === 0 && <span style={{ color: C.textMuted, fontSize: '13px', fontStyle: 'italic' }}>Chưa có bình luận nào.</span>}
               </div>
+            </div>
+
+            {/* ACTIVITY LOG SECTION */}
+            <div style={{ marginTop: '48px', paddingTop: '24px', borderTop: `1px solid ${C.border}` }}>
+               <h4 style={{ fontSize: '13px', fontWeight: 600, color: C.text, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                 <span>Nhật ký hoạt động</span>
+               </h4>
+               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {activityLogs.map(log => (
+                    <div key={log.id} style={{ display: 'flex', gap: '12px' }}>
+                       <div style={{ width: '24px', height: '24px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: C.textMuted }}>
+                          ⚡
+                       </div>
+                       <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '13px', color: C.text }}>
+                             <span style={{ fontWeight: 600 }}>{log.userFullName}</span> {log.content}
+                          </div>
+                          <div style={{ fontSize: '11px', color: C.textMuted, marginTop: '2px' }}>
+                             {new Date(log.createdAt).toLocaleString('vi-VN')}
+                          </div>
+                       </div>
+                    </div>
+                  ))}
+               </div>
             </div>
             
           </div>

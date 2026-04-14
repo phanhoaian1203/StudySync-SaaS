@@ -113,6 +113,26 @@ export interface TaskResponse {
   assignees?: UserDto[];
   comments?: TaskCommentResponse[];
   attachments?: TaskAttachmentResponse[];
+  activityLogs?: ActivityLogResponse[];
+  checklists?: TaskChecklistResponse[];
+}
+
+export interface ActivityLogResponse {
+  id: string;
+  userId: string;
+  userFullName: string;
+  activityType: string;
+  content: string;
+  oldValue?: string;
+  newValue?: string;
+  createdAt: string;
+}
+
+export interface TaskChecklistResponse {
+  id: string;
+  content: string;
+  isCompleted: boolean;
+  orderIndex: number;
 }
 
 export interface TaskAttachmentResponse {
