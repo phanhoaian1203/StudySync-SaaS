@@ -46,7 +46,7 @@ This project is **100% Dockerized**. You DO NOT need to install the .NET SDK, No
 
 **Step 1: Clone the repository**
 ```bash
-git clone https://github.com/phanhoaian1203/StudySync-SaaS
+git clone https://github.com/phanhoaian1203/StudySync-SaaS.git
 cd StudySync-SaaS
 ```
 
