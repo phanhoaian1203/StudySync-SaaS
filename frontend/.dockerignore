@@ -1,0 +1,32 @@
+# =============================================================
+# frontend/.dockerignore
+# Loại trừ các file không cần thiết khi build Docker image
+# =============================================================
+
+# Dependencies (sẽ được cài lại trong container qua npm ci)
+node_modules/
+
+# Build output cũ (sẽ được build lại)
+dist/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# Local env files (KHÔNG muốn đưa .env local vào image)
+.env
+.env.local
+.env.development
+.env.development.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db

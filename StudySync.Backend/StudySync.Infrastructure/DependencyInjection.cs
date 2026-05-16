@@ -26,7 +26,21 @@ public static class DependencyInjection
                 "Connection string 'DefaultConnection' chưa được cấu hình!");
 
         services.AddDbContext<ApplicationDbContext>(options =>
-            options.UseSqlServer(connectionString));
+            options.UseSqlServer(connectionString, sqlOptions =>
+            {
+                // ── DOCKER RESILIENCE ──────────────────────────────────────
+                // Bật tự động retry khi SQL Server chưa sẵn sàng.
+                // Quan trọng trong Docker: SQL Server cần 20-60s để khởi động
+                // sau khi healthcheck pass. Nếu không có retry → backend crash.
+                // Retry 6 lần, mỗi lần cách nhau tối đa 30 giây (tổng ~3 phút)
+                sqlOptions.EnableRetryOnFailure(
+                    maxRetryCount: 6,
+                    maxRetryDelay: TimeSpan.FromSeconds(30),
+                    errorNumbersToAdd: null);
+                
+                // Timeout mỗi lần kết nối: 60 giây
+                sqlOptions.CommandTimeout(60);
+            }));
 
         // ── REPOSITORIES ────────────────────────────────────────────
         services.AddScoped<IUserRepository, UserRepository>();

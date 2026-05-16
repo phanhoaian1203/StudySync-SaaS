@@ -174,12 +174,36 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+// Chỉ redirect HTTPS trong môi trường Development
+// Khi chạy trong Docker container, HTTPS được xử lý ở tầng reverse proxy/nginx bên ngoài
+// Nếu bật trong container sẽ gây redirect loop vì container không có SSL cert
+if (app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<StudySync.Infrastructure.Hubs.BoardHub>("/hubs/board");
+
+// ════════════════════════════════════════════════════════════════════
+// 6. AUTOMATIC DATABASE MIGRATION (Hỗ trợ Docker không cần cài .NET SDK)
+// ════════════════════════════════════════════════════════════════════
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    try
+    {
+        app.Logger.LogInformation("Đang kiểm tra và chạy Database Migration tự động...");
+        dbContext.Database.Migrate();
+        app.Logger.LogInformation("Database Migration hoàn tất!");
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Lỗi nghiêm trọng khi chạy Database Migration.");
+    }
+}
 
 app.Run();

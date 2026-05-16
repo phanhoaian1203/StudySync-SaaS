@@ -1,0 +1,113 @@
+# =============================================================
+# docker-compose.yml — Điều phối toàn bộ StudySync Stack
+# =============================================================
+# Cách chạy: docker-compose --env-file .env.docker up -d --build
+# =============================================================
+
+services:
+
+  # ===========================================================
+  # SERVICE 1: SQL SERVER 2022
+  # ----------------------------------------------------------
+  # Vai trò   : Cơ sở dữ liệu chính của ứng dụng
+  # Image     : SQL Server 2022 phiên bản Linux (chạy được mọi OS)
+  # Healthcheck: Backend sẽ đợi đến khi SQL Server sẵn sàng
+  # ===========================================================
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: studysync-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${SA_PASSWORD}
+      MSSQL_PID: Express
+    ports:
+      - "14333:1433"          # Cổng 14333 trên máy host -> 1433 trong container (Tránh xung đột SQL Server local)
+    volumes:
+      - sqlserver_data:/var/opt/mssql   # Dữ liệu DB bền vững, không mất khi restart
+    networks:
+      - studysync-network
+    restart: unless-stopped
+    healthcheck:
+      # Ping SQL Server: đợi đến khi nó nhận kết nối mới chạy backend
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$SA_PASSWORD\" -Q \"SELECT 1\" -No -l 5"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 60s     # SQL Server 2022 cần ~45-90s để khởi động hoàn toàn
+
+  # ===========================================================
+  # SERVICE 2: .NET 8 BACKEND API
+  # ----------------------------------------------------------
+  # Vai trò   : REST API + SignalR Hub
+  # Phụ thuộc : Chờ sqlserver healthy rồi mới khởi động
+  # Port      : 8080 → http://localhost:8080
+  # Swagger   : http://localhost:8080/swagger (chỉ khi Development)
+  # ===========================================================
+  backend:
+    build:
+      context: ./StudySync.Backend
+      dockerfile: Dockerfile
+    container_name: studysync-backend
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+
+      # Connection String → trỏ đến container sqlserver (tên service = hostname trong Docker network)
+      ConnectionStrings__DefaultConnection: "Server=sqlserver,1433;Database=StudySyncDb;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;MultipleActiveResultSets=True;Connect Timeout=60;"
+
+      # JWT Configuration (override appsettings.json)
+      Jwt__Secret: ${JWT_SECRET}
+      Jwt__Issuer: StudySyncBackend
+      Jwt__Audience: StudySyncFrontend
+
+      # Cloudinary (override appsettings.json)
+      CloudinarySettings__CloudName: ${CLOUDINARY_CLOUD_NAME}
+      CloudinarySettings__ApiKey: ${CLOUDINARY_API_KEY}
+      CloudinarySettings__ApiSecret: ${CLOUDINARY_API_SECRET}
+
+      # CORS — cho phép các origin của frontend
+      AllowedOrigins__0: http://localhost:3000
+      AllowedOrigins__1: http://localhost:5173
+      AllowedOrigins__2: http://localhost:5174
+    ports:
+      - "8080:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy     # Đảm bảo SQL Server healthy trước khi backend start
+    networks:
+      - studysync-network
+    restart: unless-stopped
+
+  # ===========================================================
+  # SERVICE 3: REACT FRONTEND (Nginx)
+  # ----------------------------------------------------------
+  # Vai trò   : Serve file React đã build qua Nginx
+  # Port      : 3000 → http://localhost:3000
+  # ===========================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: studysync-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - studysync-network
+    restart: unless-stopped
+
+# =============================================================
+# VOLUMES — Lưu trữ dữ liệu bền vững
+# =============================================================
+volumes:
+  sqlserver_data:
+    name: studysync-sqlserver-data
+
+# =============================================================
+# NETWORKS — Mạng nội bộ riêng cho các container
+# =============================================================
+networks:
+  studysync-network:
+    name: studysync-network
+    driver: bridge

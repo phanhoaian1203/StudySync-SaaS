@@ -1,0 +1,29 @@
+# =============================================================
+# StudySync.Backend/.dockerignore
+# Loại trừ các file không cần thiết khi build Docker image
+# Giúp build context nhỏ hơn → build nhanh hơn
+# =============================================================
+
+# Build artifacts (sẽ được build lại trong container)
+**/bin/
+**/obj/
+
+# Visual Studio files
+.vs/
+**/*.user
+**/*.suo
+
+# Git
+.git/
+.gitignore
+
+# Test projects (không cần trong production image)
+**/*.Tests/
+**/*.Test/
+
+# Logs
+**/*.log
+**/[Ll]ogs/
+
+# User secrets (không được đưa vào image)
+**/secrets.json
