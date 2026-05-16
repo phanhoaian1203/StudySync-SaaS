@@ -1,7 +1,9 @@
 # =============================================================
 # docker-compose.yml — Điều phối toàn bộ StudySync Stack
 # =============================================================
-# Cách chạy: docker-compose --env-file .env.docker up -d --build
+# Cách chạy: 
+# 1. Tạo file .env từ .env.example
+# 2. Chạy: docker compose up -d --build
 # =============================================================
 
 services:
