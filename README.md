@@ -13,78 +13,61 @@
 
 <br />
 
-## 🌟 Giới Thiệu (About The Project)
+## 🌟 About The Project
 
-**StudySync** là một nền tảng SaaS chuyên nghiệp hỗ trợ quản lý công việc và học tập. Dự án được thiết kế theo chuẩn **Clean Architecture** ở Backend và kiến trúc Component-based hiện đại ở Frontend. Đặc biệt, hệ thống hỗ trợ đồng bộ hóa thời gian thực (Real-time) để các thành viên trong nhóm có thể làm việc cùng nhau mượt mà.
+**StudySync** is a professional SaaS platform designed to streamline task and study management. The project is engineered using **Clean Architecture** on the Backend and modern Component-based architecture on the Frontend. It features real-time synchronization to ensure seamless collaboration among team members.
 
-### ✨ Các Tính Năng Nổi Bật (Key Features)
-- **Bảng Kanban Real-time:** Quản lý công việc bằng thao tác kéo thả, mọi thay đổi được cập nhật tức thì tới tất cả người dùng thông qua SignalR.
-- **Quản Lý Không Gian Làm Việc (Workspace):** Tạo và phân quyền làm việc theo nhóm.
-- **Tích hợp Cloudinary:** Hỗ trợ upload ảnh và file đính kèm tốc độ cao.
-- **Bảo mật cao:** Sử dụng JWT Authentication kết hợp mã hóa dữ liệu an toàn.
-- **Zero-Install (Docker):** Toàn bộ dự án đã được tự động hóa. Người mới tải code về KHÔNG CẦN cài đặt môi trường.
+### ✨ Key Features
+- **Real-time Kanban Board:** Manage tasks using drag-and-drop. All changes are instantly synced to all active users via SignalR.
+- **Workspace Management:** Create and manage collaborative team workspaces with role-based access.
+- **Cloudinary Integration:** Fast and reliable attachment and image uploading.
+- **Robust Security:** Implements JWT Authentication and secure data encryption.
+- **Zero-Install (Docker):** Fully containerized setup. New team members can run the entire project without installing local dependencies.
 
 ---
 
-## 🛠️ Công Nghệ Sử Dụng (Tech Stack)
+## 🛠️ Tech Stack
 
 *   **Frontend:** ReactJS, TypeScript, Vite, TailwindCSS.
 *   **Backend:** ASP.NET Core 8 Web API, Entity Framework Core, SignalR.
-*   **Cơ Sở Dữ Liệu:** Microsoft SQL Server 2022.
+*   **Database:** Microsoft SQL Server 2022.
 *   **DevOps & Deployment:** Docker, Docker Compose, Nginx.
 
 ---
 
-## 🚀 Hướng Dẫn Chạy Dự Án Nhanh (Dành Cho Thành Viên Nhóm)
+## 🚀 Quick Start 
 
-Dự án này đã được cấu hình **Docker hóa 100%**. Bạn KHÔNG CẦN cài đặt .NET SDK, Node.js hay SQL Server trên máy thật.
+This project is **100% Dockerized**. You DO NOT need to install the .NET SDK, Node.js, or SQL Server on your local machine.
 
-### Yêu Cầu Cơ Bản
-* Máy đã cài đặt sẵn [Docker Desktop](https://www.docker.com/products/docker-desktop/) và đang mở phần mềm này.
+### Prerequisites
+* You must have [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running.
 
-### Các Bước Cài Đặt (Chỉ mất 3 phút)
+### Installation (Takes ~3 minutes)
 
-**Bước 1: Clone dự án về máy**
+**Step 1: Clone the repository**
 ```bash
-git clone https://github.com/your-username/StudySync-SaaS.git
+git clone https://github.com/phanhoaian1203/StudySync-SaaS
 cd StudySync-SaaS
 ```
 
-**Bước 2: Thiết lập biến môi trường**
-Dự án cần một số mật khẩu bảo mật không được đẩy lên GitHub.
-1. Tại thư mục gốc, tìm file `.env.example`.
-2. Copy file đó và đổi tên thành `.env`.
-3. Mở file `.env` và điền cấu hình của bạn. *(Lưu ý: Mật khẩu SQL phải chứa chữ Hoa, Thường, Số và Ký tự đặc biệt. VD: `StudySync@Strong2026!`)*.
+**Step 2: Configure environment variables**
+The project requires secret keys that are not pushed to GitHub.
+1. In the root directory, locate the `.env.example` file.
+2. Duplicate the file and rename the copy to `.env`.
+3. Open the `.env` file and fill in your configuration. *(Note: The SQL password must contain uppercase, lowercase, numbers, and special characters. E.g., `StudySync@Strong2026!`)*.
 
-**Bước 3: Khởi chạy dự án**
-Mở Terminal ngay tại thư mục chứa file `docker-compose.yml` và chạy lệnh sau:
+**Step 3: Run the project**
+Open a Terminal in the root directory (where `docker-compose.yml` is located) and execute:
 ```bash
 docker compose up -d --build
 ```
-> ⏳ **Lưu ý:** Trong lần chạy đầu tiên, Docker sẽ tải về các thư viện cần thiết và **tự động chạy lệnh tạo Database (Migration)**. Vui lòng đợi khoảng 1-3 phút để SQL Server khởi động hoàn tất.
+> ⏳ **Note:** During the first run, Docker will download the required images and **automatically run database migrations**. Please wait 1-3 minutes for the SQL Server to fully initialize.
 
-### 🌐 Truy Cập Ứng Dụng
-Sau khi các container báo trạng thái `healthy`, bạn có thể sử dụng hệ thống tại:
-*   **Giao Diện Web:** [http://localhost:3000](http://localhost:3000)
-*   **Tài Liệu API (Swagger):** [http://localhost:8080/swagger](http://localhost:8080/swagger)
-*   **Kết nối Database:** Dùng SSMS/DBeaver kết nối vào `localhost,14333` (User: `sa` / Pass: mật khẩu trong file `.env`).
-
----
-
-## 📁 Cấu Trúc Dự Án (Folder Structure)
-
-```text
-StudySync-SaaS/
-├── StudySync.Backend/     # Chứa mã nguồn .NET 8 (API, Application, Domain, Infrastructure)
-├── frontend/              # Chứa mã nguồn ReactJS + Vite
-├── docker-compose.yml     # File cấu hình nhạc trưởng cho toàn bộ container
-├── .env.example           # File mẫu biến môi trường cho thành viên
-├── .gitignore             # Danh sách bỏ qua của Git
-└── DOCKER_ARCHITECTURE_GUIDE.md  # Tài liệu đọc thêm về kiến trúc Docker
-```
-
-## 📖 Tài Liệu Bổ Sung
-Nếu bạn muốn hiểu sâu hơn về lý do và cách chúng tôi triển khai Docker, ánh xạ cổng, và cách luồng dữ liệu hoạt động, vui lòng đọc file [DOCKER_ARCHITECTURE_GUIDE.md](./DOCKER_ARCHITECTURE_GUIDE.md).
+### 🌐 Accessing the Application
+Once the containers report a `healthy` status, the system is ready at:
+*   **Web Interface:** [http://localhost:3000](http://localhost:3000)
+*   **API Documentation (Swagger):** [http://localhost:8080/swagger](http://localhost:8080/swagger)
+*   **Database Connection:** Use SSMS/DBeaver to connect to `localhost,14333` (User: `sa` / Password: the password in your `.env` file).
 
 ---
-*Dự án được phát triển với 💖 và cam kết Clean Architecture.*
+*Developed with 💖 and committed to Clean Architecture.*
